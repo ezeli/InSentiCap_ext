@@ -96,7 +96,6 @@ def parse_opt():
     settings['concept_mid_him'] = 1024
     settings['sentiment_convs_num'] = 2
     # settings['num_kernels_per_sentiment'] = 4
-    settings['sentiment_feat_dim'] = 14 * 14
     settings['sentiment_fcs_num'] = 2
     settings['text_cnn_filters'] = (3, 4, 5)
     settings['text_cnn_out_dim'] = 256

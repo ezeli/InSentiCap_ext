@@ -29,6 +29,8 @@ class SentimentDetector(nn.Module):
 
     def forward(self, features):
         # [bz, 14, 14, fc_feat_dim]
+        map_dim = int((features.numel() // features.size(0) // features.size(-1))**0.5)
+        features = features.reshape(features.size(0), map_dim, map_dim, features.size(-1))
         features = features.permute(0, 3, 1, 2)  # [bz, fc_feat_dim, 14, 14]
         features = self.convs(features)  # [bz, channels, 14, 14]
         senti_features = self.senti_conv(features)  # [bz, num_sentis, 14, 14]
