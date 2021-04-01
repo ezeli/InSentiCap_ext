@@ -226,7 +226,8 @@ class Captioner(nn.Module):
     def _decode(self, captions, lengths, g_feats,
                 con_out=None, con_masks=None, sen_out=None, sen_masks=None):
         captions, seq_masks = self._sequence_encode(captions, lengths)  # bs*seq_len*d_model, bs*seq_len*seq_len
-        captions[:, 0] = g_feats
+        captions = captions + g_feats.unsqueeze(1)
+        # captions[:, 0] = g_feats
 
         dec_out = self.decoder(captions, seq_masks, con_out, con_masks, sen_out, sen_masks)  # bs*seq_len*d_model
         dec_out = self.classifier(dec_out).log_softmax(dim=-1)  # bs*seq_len*vocab
