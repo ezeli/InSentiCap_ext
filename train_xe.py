@@ -131,7 +131,7 @@ def train():
                                       opt.xe_num_works, shuffle=False)
     scs_data = get_senti_corpus_with_sentis_dataloader(
         senti_captions, idx2word.index('<PAD>'), opt.max_seq_len,
-        opt.num_concepts, opt.num_sentiments, 80, opt.xe_num_works)
+        opt.num_concepts, opt.num_sentiments, opt.xe_bs*5, opt.xe_num_works)
 
     test_captions = {}
     for fn in img_captions['test']:

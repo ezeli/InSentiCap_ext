@@ -207,7 +207,7 @@ def train():
 
     scs_data = get_senti_corpus_with_sentis_dataloader(
         senti_captions, idx2word.index('<PAD>'), opt.max_seq_len,
-        opt.num_concepts, opt.num_sentiments, 80, opt.rl_num_works)
+        opt.num_concepts, opt.num_sentiments, opt.rl_bs, opt.rl_num_works)
 
     # lms = {}
     # lm_dir = os.path.join(opt.captions_dir, dataset_name, corpus_type, 'lm')
@@ -218,7 +218,7 @@ def train():
     model.set_ciderd_scorer(img_captions)
     model.set_sentiment_words(sentiment_words)
 
-    tmp_dir = ''
+    tmp_dir = '04cls_500'
     checkpoint = os.path.join(opt.checkpoint, 'rl', dataset_name, corpus_type, tmp_dir)
     if not os.path.exists(checkpoint):
         os.makedirs(checkpoint)
