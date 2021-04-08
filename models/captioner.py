@@ -116,25 +116,43 @@ class Encoder(nn.Module):
 class DecoderLayer(nn.Module):
     def __init__(self, settings):
         super(DecoderLayer, self).__init__()
-        self.masked_multi_head_att = MultiHeadAttention(settings)
-        self.con_multi_head_att = MultiHeadAttention(settings)
-        self.sen_multi_head_att = MultiHeadAttention(settings)
+        self.self_att = MultiHeadAttention(settings)
+
+        self.vis_con_att = MultiHeadAttention(settings)
+        self.vis_sen_att = MultiHeadAttention(settings)
+        self.sem_con_att = MultiHeadAttention(settings)
+        self.sem_sen_att = MultiHeadAttention(settings)
+
         self.feed_forward = PositionwiseFeedForward(settings)
-        self.layer_norms = nn.ModuleList([nn.LayerNorm(settings['d_model']) for _ in range(4)])
+        self.layer_norms = nn.ModuleList([nn.LayerNorm(settings['d_model']) for _ in range(6)])
         self.drop = nn.Dropout(settings['dropout_p'])
 
-    def _add_res_connection(self, x, sublayer, n):
-        return x + self.drop(sublayer(self.layer_norms[n](x)))  # x + self.drop(sublayer(self.layer_norms[n](x)))
+    def _sublayer(self, x, sublayer, n):
+        return self.drop(sublayer(self.layer_norms[n](x)))  # x + self.drop(sublayer(self.layer_norms[n](x)))
 
-    def forward(self, captions, seq_masks, con_out, con_masks, sen_out, sen_masks):
-        x = self._add_res_connection(captions, lambda x: self.masked_multi_head_att(x, x, x, seq_masks), 0)
-        _x = 0
-        if con_out is not None:
-            _x = _x + self._add_res_connection(x, lambda x: self.con_multi_head_att(x, con_out, con_out, con_masks), 1)
-        if sen_out is not None:
-            _x = _x + self._add_res_connection(x, lambda x: self.sen_multi_head_att(x, sen_out, sen_out, sen_masks), 2)
-        x = _x
-        return self._add_res_connection(x, self.feed_forward, -1)
+    def _add_res_connection(self, x, sublayer, n):
+        return x + self._sublayer(x, sublayer, n)  # x + self.drop(sublayer(self.layer_norms[n](x)))
+
+    def _fuse_gate(self, x, att_feats):
+        scores = att_feats.matmul(x.unsqueeze(-1))  # [bs, seq_len, 2 or 4, 1]
+        scores = scores.transpose(2, 3).softmax(-1)  # [bs, seq_len, 1, 2 or 4]
+        att_feats = scores.matmul(att_feats).squeeze(2)  # [bs, seq_len, d_model]
+        return x + att_feats
+
+    def forward(self, captions, seq_masks, cpt_words, senti_words, region_feats, spatial_feats):
+        captions = self._add_res_connection(captions, lambda x: self.self_att(x, x, x, seq_masks), 0)
+
+        cpt_words = self._sublayer(captions, lambda x: self.sem_con_att(x, cpt_words, cpt_words), 1)
+        senti_words = self._sublayer(captions, lambda x: self.sem_sen_att(x, senti_words, senti_words), 2)
+        if region_feats is not None:
+            region_feats = self._sublayer(captions, lambda x: self.vis_con_att(x, region_feats, region_feats), 3)
+            spatial_feats = self._sublayer(captions, lambda x: self.vis_sen_att(x, spatial_feats, spatial_feats), 4)
+            att_feats = torch.stack([cpt_words, senti_words, region_feats, spatial_feats], dim=2)  # [bs, seq_len, 4, d_model]
+        else:
+            att_feats = torch.stack([cpt_words, senti_words], dim=2)  # [bs, seq_len, 2, d_model]
+        fuse_feats = self._fuse_gate(captions, att_feats)
+
+        return self._add_res_connection(fuse_feats, self.feed_forward, -1)
 
 
 class Decoder(nn.Module):
@@ -143,9 +161,9 @@ class Decoder(nn.Module):
         self.layers = nn.ModuleList([DecoderLayer(settings) for _ in range(settings['N_dec'])])
         self.layer_norm = nn.LayerNorm(settings['d_model'])
 
-    def forward(self, captions, seq_masks, con_out, con_masks, sen_out, sen_masks):
+    def forward(self, captions, seq_masks, cpt_words, senti_words, region_feats, spatial_feats):
         for layer in self.layers:
-            captions = layer(captions, seq_masks, con_out, con_masks, sen_out, sen_masks)
+            captions = layer(captions, seq_masks, cpt_words, senti_words, region_feats, spatial_feats)
         return self.layer_norm(captions)
 
 
@@ -162,25 +180,57 @@ class Captioner(nn.Module):
 
         self.d_model = settings['d_model']
         self.vocab_size = len(idx2word)
-        self.drop = nn.Dropout(settings['dropout_p'])
+        drop = nn.Dropout(settings['dropout_p'])
         self.word_embed = nn.Sequential(nn.Embedding(self.vocab_size, settings['d_model'],
                                                      padding_idx=self.pad_id),
-                                        nn.ReLU())
-        self.senti_label_embed = nn.Sequential(nn.Embedding(len(sentiment_categories), settings['d_model']),
-                                               nn.ReLU())
-        self.fc_embed = nn.Sequential(nn.Linear(settings['fc_feat_dim'], settings['d_model']),
-                                      nn.ReLU())
-        self.cpt2fc = nn.Sequential(nn.Linear(settings['d_model'], settings['d_model']),
-                                    nn.ReLU())
+                                        nn.ReLU(),
+                                        drop)
         self.pe = PositionalEncoding(settings)
-        self.att_embed = nn.Sequential(nn.Linear(settings['att_feat_dim'], settings['d_model']),
-                                       nn.ReLU())
+        self.senti_label_embed = nn.Sequential(nn.Embedding(len(sentiment_categories), settings['d_model']),
+                                               nn.ReLU(),
+                                               drop)
+        # self.cpt2fc = nn.Sequential(nn.Linear(settings['d_model'], settings['d_model']),
+        #                             nn.ReLU())
+        self.vis_con_encoder = nn.ModuleDict({
+            'emb': nn.Sequential(nn.Linear(settings['att_feat_dim'], settings['d_model']),
+                                 nn.ReLU(),
+                                 drop),
+            'enc': Encoder(settings)
+        })
 
-        self.con_encoder = Encoder(settings)
-        self.sen_encoder = Encoder(settings)
+        self.vis_sen_encoder = nn.ModuleList([
+            self._get_vis_sen_head(settings) for _ in range(len(sentiment_categories))
+        ])
+
+        self.sem_con_encoder = Encoder(settings)
+        self.sem_sen_encoder = Encoder(settings)
+
         self.decoder = Decoder(settings)
-
         self.classifier = nn.Linear(settings['d_model'], self.vocab_size)
+
+    def _get_vis_sen_head(self, settings):
+        drop = nn.Dropout(settings['dropout_p'])
+        convs = nn.Sequential()
+        in_channels = settings['att_feat_dim']
+        for i in range(2):
+            convs.add_module(
+                'conv_%d' % i, nn.Conv2d(in_channels, in_channels // 2, 3))
+            in_channels //= 2
+        convs.add_module('relu1', nn.ReLU())
+        convs.add_module('drop1', drop)
+        for i in range(2, 4):
+            convs.add_module(
+                'conv_%d' % i, nn.Conv2d(in_channels, in_channels, 3))
+        convs.add_module('relu2', nn.ReLU())
+        convs.add_module('drop2', drop)
+        vis_head = nn.ModuleDict({
+            'conv': convs,
+            'emb': nn.Sequential(nn.Linear(in_channels, settings['d_model']),
+                                 nn.ReLU(),
+                                 drop),
+            'ln': nn.LayerNorm(settings['d_model'])
+        })
+        return vis_head
 
     def forward(self, *args, **kwargs):
         mode = kwargs.get('mode', 'xe')
@@ -204,97 +254,75 @@ class Captioner(nn.Module):
             seq_masks = seq_masks & seq_masks.new_ones(1, seq_len, seq_len).tril(diagonal=0)  # bs*seq_len*seq_len
         return captions, seq_masks
 
-    def _encode(self, enc_input, masks=None, mode='con'):
-        batch_size = enc_input.size(0)
-        if masks is not None:
-            masks = masks.unsqueeze(-2)  # bs*1*num_atts
+    def _vis_encode(self, region_feats, spatial_feats, senti_labels):
+        region_feats = region_feats.reshape(region_feats.size(0), -1, region_feats.size(-1))
+        region_feats = self.vis_con_encoder['emb'](region_feats)
+        region_feats = self.vis_con_encoder['enc'](region_feats, None)
 
-        if mode == 'con':
-            feats = enc_input.reshape(enc_input.size(0), -1, enc_input.size(-1))  # bs*num_atts*feat_emb
-            feats = self.att_embed(feats)  # bs*num_atts*d_model
-            feats = self.drop(feats)
-            enc_out = self.con_encoder(feats, masks)  # bs*num_atts*d_model
-        else:
-            feats = torch.cat(
-                [enc_input.new_zeros(batch_size, 1).fill_(self.pad_id), enc_input],
-                dim=1)  # [bs, num_stmts]
-            feats = self.word_embed(feats)  # bs*num_stmts*d_model
-            feats = self.drop(feats)
-            enc_out = self.sen_encoder(feats, masks)  # bs*num_stmts*d_model
-        return enc_out, masks
+        map_dim = int((spatial_feats.numel() // spatial_feats.size(0) // spatial_feats.size(-1)) ** 0.5)
+        spatial_feats = spatial_feats.reshape(spatial_feats.size(0), map_dim, map_dim, spatial_feats.size(-1))
+        spatial_feats = spatial_feats.permute(0, 3, 1, 2)  # [bz, fc_feat_dim, 14, 14]
+        s_feats = []
+        for i, senti_label in enumerate(senti_labels):
+            senti_label = int(senti_label)
+            head = self.vis_sen_encoder[senti_label]
+            s_feat = head['conv'](spatial_feats[i:i+1])  # [1, 512, 6, 6]
+            s_feat = s_feat.squeeze(0).reshape(s_feat.size(1), -1).permute(1, 0)  # [36, 512]
+            s_feat = head['emb'](s_feat)  # [36, 512]
+            s_feat = head['ln'](s_feat)  # [36, 512]
+            s_feats.append(s_feat)
+        spatial_feats = torch.stack(s_feats, dim=0)  # [bz, 36, 512]
+        return region_feats, spatial_feats
 
-    def _decode(self, captions, lengths, g_feats,
-                con_out=None, con_masks=None, sen_out=None, sen_masks=None):
+    def _sem_encode(self, cpt_words, senti_words):
+        cpt_words = self.word_embed(cpt_words)
+        cpt_words = self.sem_con_encoder(cpt_words, None)
+
+        senti_words = self.word_embed(senti_words)
+        senti_words = self.sem_sen_encoder(senti_words, None)
+        return cpt_words, senti_words
+
+    def _decode(self, captions, lengths, senti_labels, cpt_words, senti_words, region_feats=None, spatial_feats=None):
         captions, seq_masks = self._sequence_encode(captions, lengths)  # bs*seq_len*d_model, bs*seq_len*seq_len
-        captions = captions + g_feats.unsqueeze(1)
-        # captions[:, 0] = g_feats
+        captions = captions + senti_labels.unsqueeze(1)
 
-        dec_out = self.decoder(captions, seq_masks, con_out, con_masks, sen_out, sen_masks)  # bs*seq_len*d_model
+        dec_out = self.decoder(captions, seq_masks, cpt_words, senti_words, region_feats, spatial_feats)  # bs*seq_len*d_model
         dec_out = self.classifier(dec_out).log_softmax(dim=-1)  # bs*seq_len*vocab
         return dec_out
 
-    def forward_xe(self, fc_feats, att_feats, cpt_words, captions, lengths, senti_labels):
-        fc_feats = self.fc_embed(fc_feats)  # [bs, d_model]
-        self.fc_feats = fc_feats
-        fc_feats = self.drop(fc_feats)
-        cpt_feats = self.word_embed(cpt_words)  # [bs, num_cpts, d_model]
-        cpt_feats = cpt_feats.mean(dim=1)  # [bs, d_model]
-        cpt_feats = self.cpt2fc(cpt_feats)  # [bs, d_model]
-        self.cpt_feats = cpt_feats
-
+    def forward_xe(self, region_feats, spatial_feats, senti_labels, cpt_words, senti_words, captions, lengths):
+        region_feats, spatial_feats = self._vis_encode(region_feats, spatial_feats, senti_labels)
         senti_labels = self.senti_label_embed(senti_labels)  # [bs, d_model]
-        senti_labels = self.drop(senti_labels)
-        g_feats = fc_feats + senti_labels
+        cpt_words, senti_words = self._sem_encode(cpt_words, senti_words)
 
-        con_out, con_masks = self._encode(att_feats, mode='con')  # bs*num_atts*d_model, bs*1*num_atts
-        dec_out = self._decode(captions[:, :-1], lengths, g_feats,
-                               con_out=con_out, con_masks=con_masks)
+        dec_out = self._decode(captions[:, :-1], lengths, senti_labels,
+                               cpt_words, senti_words, region_feats, spatial_feats)
         return dec_out
 
-    def forward_seq2seq(self, senti_captions, lengths, cpt_words, senti_words, senti_labels):
-        cpt_feats = self.word_embed(cpt_words)  # [bs, num_cpts, d_model]
-        cpt_feats = cpt_feats.mean(dim=1)  # [bs, d_model]
-        cpt_feats = self.cpt2fc(cpt_feats)  # [bs, d_model]
-        cpt_feats = self.drop(cpt_feats)
-        fc_feats = cpt_feats
-
+    def forward_seq2seq(self, senti_labels, cpt_words, senti_words, senti_captions, lengths):
         senti_labels = self.senti_label_embed(senti_labels)  # [bs, d_model]
-        senti_labels = self.drop(senti_labels)
-        g_feats = fc_feats + senti_labels
+        cpt_words, senti_words = self._sem_encode(cpt_words, senti_words)
 
-        sen_out, sen_masks = self._encode(senti_words, mode='sen')  # bs*num_atts*d_model, bs*1*num_atts
-        dec_out = self._decode(senti_captions[:, :-1], lengths, g_feats,
-                               sen_out=sen_out, sen_masks=sen_masks)
+        dec_out = self._decode(senti_captions[:, :-1], lengths, senti_labels,
+                               cpt_words, senti_words)
         return dec_out
 
-    def forward_rl(self, fc_feats, att_feats, cpt_words, senti_words, senti_labels, sample_max):
-        batch_size = att_feats.size(0)
+    def forward_rl(self, region_feats, spatial_feats, senti_labels, cpt_words, senti_words, sample_max):
+        batch_size = region_feats.size(0)
 
-        fc_feats = self.fc_embed(fc_feats)  # [bs, d_model]
-        self.fc_feats = fc_feats
-        fc_feats = self.drop(fc_feats)
-        cpt_feats = self.word_embed(cpt_words)  # [bs, num_cpts, d_model]
-        cpt_feats = cpt_feats.mean(dim=1)  # [bs, d_model]
-        cpt_feats = self.cpt2fc(cpt_feats)  # [bs, d_model]
-        self.cpt_feats = cpt_feats
-
+        region_feats, spatial_feats = self._vis_encode(region_feats, spatial_feats, senti_labels)
         senti_labels = self.senti_label_embed(senti_labels)  # [bs, d_model]
-        senti_labels = self.drop(senti_labels)
-        g_feats = fc_feats + senti_labels
+        cpt_words, senti_words = self._sem_encode(cpt_words, senti_words)
 
-        con_out, con_masks = self._encode(att_feats, mode='con')  # bs*num_atts*d_model, bs*1*num_atts
-        sen_out, sen_masks = self._encode(senti_words, mode='sen')  # bs*num_atts*d_model, bs*1*num_atts
-
-        seq = att_feats.new_zeros((batch_size, self.max_seq_len), dtype=torch.long)
-        seq_logprobs = att_feats.new_zeros((batch_size, self.max_seq_len))
-        seq_masks = att_feats.new_zeros((batch_size, self.max_seq_len))
-        it = att_feats.new_zeros(batch_size, dtype=torch.long).fill_(self.sos_id)  # first input <SOS>
+        seq = region_feats.new_zeros((batch_size, self.max_seq_len), dtype=torch.long)
+        seq_logprobs = region_feats.new_zeros((batch_size, self.max_seq_len))
+        seq_masks = region_feats.new_zeros((batch_size, self.max_seq_len))
+        it = region_feats.new_zeros(batch_size, dtype=torch.long).fill_(self.sos_id)  # first input <SOS>
         unfinished = it == self.sos_id
         pre_words = it.unsqueeze(1)  # bs*1
         for t in range(self.max_seq_len):
-            logprobs = self._decode(pre_words, None, g_feats,
-                                    con_out=con_out, con_masks=con_masks,
-                                    sen_out=sen_out, sen_masks=sen_masks)  # bs*seq_len*vocab
+            logprobs = self._decode(pre_words, None, senti_labels,
+                                    cpt_words, senti_words, region_feats, spatial_feats)  # bs*seq_len*vocab
             logprobs = logprobs[:, -1]  # bs*vocab
 
             if sample_max:
@@ -318,24 +346,17 @@ class Captioner(nn.Module):
 
         return seq, seq_logprobs, seq_masks
 
-    def sample(self, fc_feat, att_feat, senti_label, senti_words=None,
+    def sample(self, region_feats, spatial_feats, senti_labels, cpt_words, senti_words,
                beam_size=3, decoding_constraint=1):
         self.eval()
-        fc_feats = fc_feat.view(1, -1)  # [1, fc_feat]
-        att_feats = att_feat.view(1, -1, att_feat.shape[-1])  # [1, num_atts, att_feat]
+        region_feats = region_feats.unsqueeze(0)  # [1, 36, att_feat]
+        spatial_feats = spatial_feats.unsqueeze(0)  # [1, 14, 14, att_feat]
+        cpt_words = cpt_words.unsqueeze(0)  # [1, num]
+        senti_words = senti_words.unsqueeze(0)  # [1, num]
 
-        fc_feats = self.fc_embed(fc_feats)  # [1, d_model]
-        fc_feats = self.drop(fc_feats)
-
-        senti_labels = self.senti_label_embed(senti_label)  # [1, d_model]
-        senti_labels = self.drop(senti_labels)
-        g_feats = fc_feats + senti_labels
-
-        con_out, con_masks = self._encode(att_feats, mode='con')  # 1*num_atts*d_model, 1*1*num_atts
-        sen_out, sen_masks = None, None
-        if senti_words is not None:
-            senti_words = senti_words.view(1, -1)  # [1, num_atts]
-            sen_out, sen_masks = self._encode(senti_words, mode='sen')  # bs*num_atts*d_model, bs*1*num_atts
+        region_feats, spatial_feats = self._vis_encode(region_feats, spatial_feats, senti_labels)
+        senti_labels = self.senti_label_embed(senti_labels)  # [1, d_model]
+        cpt_words, senti_words = self._sem_encode(cpt_words, senti_words)
 
         # log_prob_sum, log_prob_seq, word_id_seq
         candidates = [BeamCandidate(0., [], [self.sos_id])]
@@ -348,10 +369,9 @@ class Captioner(nn.Module):
                     tmp_candidates.append(candidate)
                 else:
                     end_flag = False
-                    pre_words = att_feat.new_tensor(word_id_seq, dtype=torch.long).unsqueeze(0)  # 1*seq_len
-                    logprobs = self._decode(pre_words, None, g_feats,
-                                            con_out=con_out, con_masks=con_masks,
-                                            sen_out=sen_out, sen_masks=sen_masks)  # 1*seq_len*vocab
+                    pre_words = region_feats.new_tensor(word_id_seq, dtype=torch.long).unsqueeze(0)  # 1*seq_len
+                    logprobs = self._decode(pre_words, None, senti_labels,
+                                            cpt_words, senti_words, region_feats, spatial_feats)  # 1*seq_len*vocab
                     logprobs = logprobs[:, -1]  # 1*vocab
                     logprobs = logprobs.squeeze(0)  # vocab_size
                     if self.pad_id != self.eos_id:
@@ -382,22 +402,6 @@ class Captioner(nn.Module):
     def get_optim_criterion(self, lr, weight_decay=0, smoothing=0.1):
         return torch.optim.Adam(self.parameters(), lr=lr, weight_decay=weight_decay), \
                LabelSmoothingCriterion(smoothing), nn.MSELoss()  # xe, domain align
-
-
-class XECriterion(nn.Module):
-    def __init__(self):
-        super(XECriterion, self).__init__()
-
-    def forward(self, pred, target, lengths):
-        max_len = max(lengths)
-        mask = pred.new_zeros(len(lengths), max_len)
-        for i, l in enumerate(lengths):
-            mask[i, :l] = 1
-
-        loss = - pred.gather(2, target.unsqueeze(2)).squeeze(2) * mask
-        loss = torch.sum(loss) / torch.sum(mask)
-
-        return loss
 
 
 class LabelSmoothingCriterion(nn.Module):

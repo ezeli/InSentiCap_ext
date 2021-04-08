@@ -33,8 +33,6 @@ class Detector(nn.Module):
 
         self.cap_optim, self.cap_xe_crit, self.cap_da_crit = self.captioner.get_optim_criterion(lrs['cap_lr'])
         self.cap_rl_crit = RewardCriterion()
-        # self.senti_optim, self.senti_crit = self.senti_detector.get_optim_criterion(lrs['senti_lr'])
-        # self.sent_optim, self.sent_crit = self.sent_senti_cls.get_optim_and_crit(lrs['sent_lr'])
 
         self.cls_flag = 0.4
         self.seq_flag = 1.0
@@ -43,67 +41,43 @@ class Detector(nn.Module):
     def set_ciderd_scorer(self, captions):
         self.ciderd_scorer = get_ciderd_scorer(captions, self.captioner.sos_id, self.captioner.eos_id)
 
-    def set_sentiment_words(self, sentiment_words):
-        self.sentiment_words = sentiment_words
-
     def set_lms(self, lms):
         self.lms = lms
 
-    def forward(self, data, data_type, training):
+    def forward(self, data, training):
         self.captioner.train(training)
         all_losses = defaultdict(float)
         device = next(self.parameters()).device
 
-        # if data_type == 'senti':
-        #     cls_flag = 1
-        # else:
-        #     cls_flag = self.cls_flag
         if training:
             seq2seq_data = iter(data[1])
-        # accur_ws = defaultdict(set)
         caption_data = iter(data[0])
         for _ in tqdm.tqdm(range(min(500, len(data[0])))):
-            data_item = next(caption_data)
-            if data_type == 'fact':
-                fns, fc_feats, att_feats, (caps_tensor, lengths), cpts_tensor, sentis_tensor, ground_truth = data_item
-                caps_tensor = caps_tensor.to(device)
-            elif data_type == 'senti':
-                fns, fc_feats, att_feats, cpts_tensor, sentis_tensor, senti_labels = data_item
-                senti_labels = senti_labels.to(device)
-            else:
-                raise Exception('data_type(%s) is wrong!' % data_type)
-
-            fc_feats = fc_feats.to(device)
-            att_feats = att_feats.to(device)
+            fns, region_feats, spatial_feats, (caps_tensor, lengths), cpts_tensor, sentis_tensor, ground_truth = next(caption_data)
+            region_feats = region_feats.to(device)
+            spatial_feats = spatial_feats.to(device)
+            caps_tensor = caps_tensor.to(device)
             cpts_tensor = cpts_tensor.to(device)
             sentis_tensor = sentis_tensor.to(device)
-            del data_item
 
-            if data_type == 'fact' or not training:
-                senti_labels, _, _, _ = self.senti_detector.sample(att_feats, self.senti_threshold)
-                senti_labels = senti_labels.detach()
+            senti_labels, _, _, _ = self.senti_detector.sample(spatial_feats, self.senti_threshold)
+            senti_labels = senti_labels.detach()
 
             sample_captions, sample_logprobs, seq_masks = self.captioner(
-                fc_feats, att_feats, cpts_tensor, sentis_tensor, senti_labels,
+                region_feats, spatial_feats, senti_labels, cpts_tensor, sentis_tensor,
                 sample_max=0, mode='rl')
-            da_loss = self.cap_da_crit(self.captioner.cpt_feats, self.captioner.fc_feats.detach())
-            all_losses['da_loss'] += float(da_loss)
-
             self.captioner.eval()
             with torch.no_grad():
                 greedy_captions, _, greedy_masks = self.captioner(
-                    fc_feats, att_feats, cpts_tensor, sentis_tensor, senti_labels,
+                    region_feats, spatial_feats, senti_labels, cpts_tensor, sentis_tensor,
                     sample_max=1, mode='rl')
             self.captioner.train(training)
 
-            if data_type == 'fact':
-                fact_reward = get_self_critical_reward(
-                    sample_captions, greedy_captions, fns, ground_truth,
-                    self.captioner.sos_id, self.captioner.eos_id, self.ciderd_scorer)
-                fact_reward = torch.from_numpy(fact_reward).float().to(device)
-                all_losses['fact_reward'] += float(fact_reward[:, 0].mean())
-            else:
-                fact_reward = 0
+            fact_reward = get_self_critical_reward(
+                sample_captions, greedy_captions, fns, ground_truth,
+                self.captioner.sos_id, self.captioner.eos_id, self.ciderd_scorer)
+            fact_reward = torch.from_numpy(fact_reward).float().to(device)
+            all_losses['fact_reward'] += float(fact_reward[:, 0].mean())
 
             cls_reward = get_cls_reward(
                 sample_captions, seq_masks, greedy_captions, greedy_masks,
@@ -117,28 +91,20 @@ class Detector(nn.Module):
             # lm_reward = torch.from_numpy(lm_reward).float().to(device)
             # all_losses['lm_reward'] += float(lm_reward[:, 0].sum())
 
-            # senti_words_reward, accur_w = get_senti_words_reward(sample_captions, senti_labels, self.sentiment_words)
-            # for senti, words in accur_w.items():
-            #     accur_ws[senti].update(words)
-            # senti_words_reward = torch.from_numpy(senti_words_reward).float().to(device)
-            # all_losses['senti_words_reward'] += float(senti_words_reward.sum())
-
             rewards = fact_reward + self.cls_flag * cls_reward  # + 0.05 * senti_words_reward
             all_losses['all_rewards'] += float(rewards.mean(-1).mean(-1))
             cap_loss = self.cap_rl_crit(sample_logprobs, seq_masks, rewards)
             all_losses['cap_loss'] += float(cap_loss)
 
-            xe_loss = 0.0
-            if data_type == 'fact':
-                with torch.no_grad():
-                    xe_senti_labels, _ = self.sent_senti_cls(caps_tensor[:, 1:], lengths)
-                    xe_senti_labels = xe_senti_labels.softmax(dim=-1)
-                    xe_senti_labels = xe_senti_labels.argmax(dim=-1).detach()
+            with torch.no_grad():
+                xe_senti_labels, _ = self.sent_senti_cls(caps_tensor[:, 1:], lengths)
+                xe_senti_labels = xe_senti_labels.softmax(dim=-1)
+                xe_senti_labels = xe_senti_labels.argmax(dim=-1).detach()
 
-                pred = self.captioner(fc_feats, att_feats, cpts_tensor, caps_tensor, lengths,
-                                      xe_senti_labels, mode='xe')
-                xe_loss = self.cap_xe_crit(pred, caps_tensor[:, 1:], lengths)
-                all_losses['xe_loss'] += float(xe_loss)
+            pred = self.captioner(region_feats, spatial_feats, xe_senti_labels, cpts_tensor, sentis_tensor,
+                                  caps_tensor, lengths, mode='xe')
+            xe_loss = self.cap_xe_crit(pred, caps_tensor[:, 1:], lengths)
+            all_losses['xe_loss'] += float(xe_loss)
 
             seq2seq_loss = 0.0
             if training:
@@ -152,13 +118,12 @@ class Detector(nn.Module):
                 sentis_tensor = sentis_tensor.to(device)
                 senti_labels = senti_labels.to(device)
 
-                pred = self.captioner(caps_tensor, lengths, cpts_tensor, sentis_tensor, senti_labels,
+                pred = self.captioner(senti_labels, cpts_tensor, sentis_tensor, caps_tensor, lengths,
                                       mode='seq2seq')
-                seq2seq_loss = self.cap_xe_crit(pred, caps_tensor[:, 1:], lengths)
-                seq2seq_loss = self.seq_flag * seq2seq_loss
+                seq2seq_loss = self.seq_flag * self.cap_xe_crit(pred, caps_tensor[:, 1:], lengths)
                 all_losses['seq2seq_loss'] += float(seq2seq_loss)
 
-            cap_loss = cap_loss + xe_loss + da_loss + seq2seq_loss
+            cap_loss = cap_loss + xe_loss + seq2seq_loss
 
             if training:
                 self.cap_optim.zero_grad()
@@ -171,22 +136,18 @@ class Detector(nn.Module):
         #     if self.cls_flag > 1.0:
         #         self.cls_flag = 1.0
 
-        # for senti, words in accur_ws.items():
-        #     for w in words:
-        #         self.sentiment_words[senti][w] *= 0.9
-
         for k, v in all_losses.items():
             all_losses[k] = v / len(data)
         return all_losses
 
-    def sample(self, fc_feats, att_feats, sentis_tensor,
+    def sample(self, region_feats, spatial_feats, cpt_words, senti_words,
                beam_size=3, decoding_constraint=1):
         self.eval()
-        att_feats = att_feats.unsqueeze(0)
+        att_feats = spatial_feats.unsqueeze(0)
         senti_label, _, det_img_sentis, _ = self.senti_detector.sample(att_feats, self.senti_threshold)
 
         captions, _ = self.captioner.sample(
-            fc_feats, att_feats, senti_label, sentis_tensor,
+            region_feats, spatial_feats, senti_label, cpt_words, senti_words,
             beam_size, decoding_constraint)
 
         return captions, det_img_sentis

@@ -11,7 +11,7 @@ device = torch.device('cuda:0')
 max_seq_len = 16
 
 
-def compute_cls(captions_file_prefix, data_type):
+def compute_cls(captions_file_prefix):
     dataset_name = 'coco'
     if 'flickr30k' in captions_file_prefix:
         dataset_name = 'flickr30k'
@@ -38,7 +38,7 @@ def compute_cls(captions_file_prefix, data_type):
     val_sets['all'] = []
     for senti_id, senti in enumerate(sentiment_categories):
         val_sets[senti] = []
-        fn = '%s_%s_%s.txt' % (captions_file_prefix, senti, data_type)
+        fn = '%s_%s.txt' % (captions_file_prefix, senti)
         with open(fn, 'r') as f:
             lines = f.readlines()
         for line in lines:
@@ -69,4 +69,4 @@ def compute_cls(captions_file_prefix, data_type):
 
 
 if __name__ == "__main__":
-    compute_cls(sys.argv[1], sys.argv[2])
+    compute_cls(sys.argv[1])

@@ -40,13 +40,11 @@ def parse_opt():
     # rl
     parser.add_argument('--rl_lrs', type=json.loads,
                         default='{"cap_lr": 4e-5}')  # , "senti_lr": 4e-5, "sent_lr": 1e-3}')
-    parser.add_argument('--rl_bs', type=int, default=40)
+    parser.add_argument('--rl_bs', type=int, default=20)
     parser.add_argument('--rl_num_works', type=int, default=0)
     parser.add_argument('--rl_resume', type=str, default='')
     parser.add_argument('--rl_senti_resume', type=str, default='checkpoint/sentiment/model-10.pth')
-    parser.add_argument('--rl_epochs', type=int, default=20)
-    parser.add_argument('--rl_fact_times', type=int, default=1)
-    parser.add_argument('--rl_senti_times', type=int, default=0)
+    parser.add_argument('--rl_epochs', type=int, default=10)
 
     # common
     parser.add_argument('--dataset_name', type=str, default='coco', choices=['coco', 'flickr30k'])
@@ -57,7 +55,7 @@ def parse_opt():
     parser.add_argument('--checkpoint', type=str, default='./checkpoint/')
     parser.add_argument('--result_dir', type=str, default='./result/')
     # parser.add_argument('--sentence_sentiment_classifier_rnn', type=str, default='')
-    parser.add_argument('--max_seq_len', type=int, default=16)
+    parser.add_argument('--max_seq_len', type=int, default=20)
     parser.add_argument('--num_concepts', type=int, default=5)
     parser.add_argument('--num_sentiments', type=int, default=10)
     parser.add_argument('--grad_clip', type=float, default=0.1)

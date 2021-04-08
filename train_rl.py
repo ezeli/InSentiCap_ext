@@ -13,7 +13,7 @@ import random
 
 from opts import parse_opt
 from models.decoder import Detector
-from dataloader import get_rl_fact_dataloader, get_rl_senti_dataloader, get_senti_corpus_with_sentis_dataloader
+from dataloader import get_caption_dataloader, get_senti_corpus_with_sentis_dataloader
 
 
 def clip_gradient(optimizer, grad_clip):
@@ -30,9 +30,7 @@ def train():
     img_captions = json.load(open(os.path.join(opt.captions_dir, dataset_name, 'img_captions.json'), 'r'))
     img_det_concepts = json.load(open(os.path.join(opt.captions_dir, dataset_name, 'img_det_concepts.json'), 'r'))
     img_det_sentiments = json.load(open(os.path.join(opt.captions_dir, dataset_name, corpus_type, 'img_det_sentiments.json'), 'r'))
-    img_senti_labels = json.load(open(opt.img_senti_labels, 'r'))
     senti_captions = json.load(open(os.path.join(opt.captions_dir, dataset_name, corpus_type, 'senti_captions.json'), 'r'))
-    sentiment_words = json.load(open(os.path.join(opt.corpus_dir, corpus_type, 'sentiment_words.json'), 'r'))
 
     model = Detector(idx2word, opt.max_seq_len, opt.sentiment_categories, opt.rl_lrs, opt.settings)
     model.to(opt.device)
@@ -75,8 +73,6 @@ def train():
         if True:
             print("====> loading rl_senti_resume '{}'".format(opt.rl_senti_resume))
             ch = torch.load(opt.rl_senti_resume, map_location=lambda s, l: s)
-            # assert opt.settings == ch['settings'], \
-            #     'opt.settings and rl_senti_resume settings are different'
             assert opt.sentiment_categories == ch['sentiment_categories'], \
                 'opt.sentiment_categories and rl_senti_resume sentiment_categories are different'
             model.senti_detector.load_state_dict(ch['model'])
@@ -85,8 +81,6 @@ def train():
             ss_cls_file = os.path.join(opt.checkpoint, 'sent_senti_cls', dataset_name, corpus_type, 'model-best.pth')
             print("====> loading checkpoint '{}'".format(ss_cls_file))
             chkpoint = torch.load(ss_cls_file, map_location=lambda s, l: s)
-            # assert opt.settings == chkpoint['settings'], \
-            #     'opt.settings and resume model settings are different'
             assert idx2word == chkpoint['idx2word'], \
                 'idx2word and resume model idx2word are different'
             assert opt.sentiment_categories == chkpoint['sentiment_categories'], \
@@ -133,16 +127,6 @@ def train():
     senti_label2idx = {}
     for i, w in enumerate(opt.sentiment_categories):
         senti_label2idx[w] = i
-    print('====> process image senti_labels begin')
-    senti_labels_id = {}
-    for split, senti_labels in img_senti_labels.items():
-        print('convert %s senti_labels to index' % split)
-        senti_labels_id[split] = []
-        for fn, senti_label in tqdm.tqdm(senti_labels):
-            senti_labels_id[split].append([fn, senti_label2idx[senti_label]])
-    img_senti_labels = senti_labels_id
-    print('====> process image senti_labels end')
-
     print('====> process senti corpus begin')
     senti_captions['positive'] = senti_captions['positive'] * int(len(senti_captions['neutral']) / len(senti_captions['positive']))
     senti_captions['negative'] = senti_captions['negative'] * int(len(senti_captions['neutral']) / len(senti_captions['negative']))
@@ -161,54 +145,27 @@ def train():
     senti_captions = senti_captions_id
     print('====> process senti corpus end')
 
-    print('====> process sentiment words begin')
-    tmp_sentiment_words = {}
-    for senti in opt.sentiment_categories:
-        senti_id = senti_label2idx[senti]
-        if senti not in sentiment_words:
-            tmp_sentiment_words[senti_id] = dict()
-        else:
-            tmp_sentiment_words[senti_id] = {word2idx[w]: 1.0 for w, s in sentiment_words[senti].items()}
-    sentiment_words = tmp_sentiment_words
-    print('====> process sentiment words end')
+    region_feats = os.path.join(opt.feats_dir, dataset_name, '%s_36_att.h5' % dataset_name)
+    spatial_feats = os.path.join(opt.feats_dir, dataset_name, '%s_att.h5' % dataset_name)
+    train_data = get_caption_dataloader(region_feats, spatial_feats, img_captions['train'],
+                                        img_det_concepts, img_det_sentiments, idx2word.index('<PAD>'),
+                                        opt.max_seq_len, opt.num_concepts, opt.num_sentiments,
+                                        opt.xe_bs, opt.xe_num_works, mode='rl')
+    val_data = get_caption_dataloader(region_feats, spatial_feats, img_captions['val'],
+                                      img_det_concepts, img_det_sentiments, idx2word.index('<PAD>'),
+                                      opt.max_seq_len, opt.num_concepts, opt.num_sentiments, opt.xe_bs,
+                                      opt.xe_num_works, shuffle=False, mode='rl')
+    scs_data = get_senti_corpus_with_sentis_dataloader(
+        senti_captions, idx2word.index('<PAD>'), opt.max_seq_len,
+        opt.num_concepts, opt.num_sentiments, opt.rl_bs, opt.xe_num_works)
 
-    fc_feats = os.path.join(opt.feats_dir, dataset_name, '%s_fc.h5' % dataset_name)
-    att_feats = os.path.join(opt.feats_dir, dataset_name, '%s_att.h5' % dataset_name)
-    fact_train_data = get_rl_fact_dataloader(
-        fc_feats, att_feats, img_captions['train'], img_det_concepts,
-        img_det_sentiments, model.captioner.pad_id, opt.max_seq_len,
-        opt.num_concepts, opt.num_sentiments, opt.rl_bs, opt.rl_num_works)
-    fact_val_data = get_rl_fact_dataloader(
-        fc_feats, att_feats, img_captions['val'], img_det_concepts,
-        img_det_sentiments, model.captioner.pad_id, opt.max_seq_len,
-        opt.num_concepts, opt.num_sentiments, opt.rl_bs, opt.rl_num_works, shuffle=False)
     test_captions = {}
     for fn in img_captions['test']:
         test_captions[fn] = [[]]
-    fact_test_data = get_rl_fact_dataloader(
-        fc_feats, att_feats, test_captions, img_det_concepts,
-        img_det_sentiments, model.captioner.pad_id, opt.max_seq_len,
-        opt.num_concepts, opt.num_sentiments, opt.rl_bs, opt.rl_num_works, shuffle=False)
-
-    senti_fc_feats = os.path.join(opt.feats_dir, 'sentiment', 'feats_fc.h5')
-    senti_att_feats = os.path.join(opt.feats_dir, 'sentiment', 'feats_att.h5')
-    senti_train_data = get_rl_senti_dataloader(
-        senti_fc_feats, senti_att_feats, img_det_concepts,
-        img_det_sentiments, img_senti_labels['train'], model.captioner.pad_id,
-        opt.num_concepts, opt.num_sentiments, opt.rl_bs, opt.rl_num_works)
-    senti_val_data = get_rl_senti_dataloader(
-        senti_fc_feats, senti_att_feats, img_det_concepts,
-        img_det_sentiments, img_senti_labels['val'], model.captioner.pad_id,
-        opt.num_concepts, opt.num_sentiments, opt.rl_bs, opt.rl_num_works, shuffle=False)
-    senti_test_data = get_rl_senti_dataloader(
-        senti_fc_feats, senti_att_feats, img_det_concepts,
-        img_det_sentiments, img_senti_labels['test'], model.captioner.pad_id,
-        opt.num_concepts, opt.num_sentiments, opt.rl_bs, opt.rl_num_works, shuffle=False)
-
-    scs_data = get_senti_corpus_with_sentis_dataloader(
-        senti_captions, idx2word.index('<PAD>'), opt.max_seq_len,
-        opt.num_concepts, opt.num_sentiments, opt.rl_bs, opt.rl_num_works)
-
+    test_data = get_caption_dataloader(region_feats, spatial_feats, test_captions,
+                                       img_det_concepts, img_det_sentiments, idx2word.index('<PAD>'),
+                                       opt.max_seq_len, opt.num_concepts, opt.num_sentiments, opt.xe_bs,
+                                       opt.xe_num_works, shuffle=False, mode='rl')
     # lms = {}
     # lm_dir = os.path.join(opt.captions_dir, dataset_name, corpus_type, 'lm')
     # for senti, i in senti_label2idx.items():
@@ -216,7 +173,6 @@ def train():
     # model.set_lms(lms)
 
     model.set_ciderd_scorer(img_captions)
-    model.set_sentiment_words(sentiment_words)
 
     tmp_dir = '04cls_500'
     checkpoint = os.path.join(opt.checkpoint, 'rl', dataset_name, corpus_type, tmp_dir)
@@ -229,84 +185,48 @@ def train():
         print('--------------------epoch: %d' % epoch)
         print('tmp_dir:', tmp_dir, 'cls_flag:', model.cls_flag, 'seq_flag:', model.seq_flag)
         torch.cuda.empty_cache()
-        for i in range(opt.rl_senti_times):
-            print('----------rl_senti_times: %d' % i)
-            senti_train_loss = model((senti_train_data, scs_data), data_type='senti', training=True)
-            print('senti_train_loss: %s' % dict(senti_train_loss))
-        for i in range(opt.rl_fact_times):
-            # seq 在前面比较好
-            # print('----------seq2seq train')
-            # seq2seq_train_loss = model(scs_data, data_type='seq2seq', training=True)
-            # print('seq2seq_train_loss: %s' % seq2seq_train_loss)
-            print('----------rl_fact_times: %d' % i)
-            fact_train_loss = model((fact_train_data, scs_data), data_type='fact', training=True)
-            print('fact_train_loss: %s' % dict(fact_train_loss))
+        train_loss = model((train_data, scs_data), training=True)
+        print('train_loss: %s' % dict(train_loss))
 
         with torch.no_grad():
             torch.cuda.empty_cache()
-            print('----------val')
-            fact_val_loss = model((fact_val_data,), data_type='fact', training=False)
-            print('fact_val_loss:', dict(fact_val_loss))
+            val_loss = model((val_data,), training=False)
+            print('val_loss:', dict(val_loss))
 
             # test
-            results = {'fact': defaultdict(list), 'senti': defaultdict(list)}
-            det_sentis = defaultdict(dict)
-            senti_imgs_num = 0
-            senti_imgs_wrong_num = 0
-            for data_type, data in [('fact', fact_test_data), ('senti', senti_test_data)]:
-                print('----------test:', data_type)
-                for data_item in tqdm.tqdm(data):
-                    if data_type == 'fact':
-                        fns, fc_feats, att_feats, _, cpts_tensor, sentis_tensor, ground_truth = data_item
-                    elif data_type == 'senti':
-                        fns, fc_feats, att_feats, cpts_tensor, sentis_tensor, senti_labels = data_item
-                        senti_labels = senti_labels.to(opt.device)
-                        senti_labels = [opt.sentiment_categories[int(idx)] for idx in senti_labels]
-                    else:
-                        raise Exception('data_type(%s) is wrong!' % data_type)
-                    fc_feats = fc_feats.to(opt.device)
-                    att_feats = att_feats.to(opt.device)
-                    sentis_tensor = sentis_tensor.to(opt.device)
+            results = defaultdict(list)
+            det_sentis = {}
+            for fns, region_feats, spatial_feats, _, cpts_tensor, sentis_tensor, _ in tqdm.tqdm(test_data):
+                region_feats = region_feats.to(opt.device)
+                spatial_feats = spatial_feats.to(opt.device)
+                cpts_tensor = cpts_tensor.to(opt.device)
+                sentis_tensor = sentis_tensor.to(opt.device)
+                for i, fn in enumerate(fns):
+                    captions, det_img_sentis = model.sample(
+                        region_feats[i], spatial_feats[i], cpts_tensor[i], sentis_tensor[i],
+                        beam_size=opt.beam_size)
+                    results[det_img_sentis[0]].append({'image_id': fn, 'caption': captions[0]})
+                    det_sentis[fn] = det_img_sentis[0]
 
-                    for i, fn in enumerate(fns):
-                        captions, det_img_sentis = model.sample(
-                            fc_feats[i], att_feats[i], sentis_tensor[i], beam_size=opt.beam_size)
-                        results[data_type][det_img_sentis[0]].append({'image_id': fn, 'caption': captions[0]})
-                        det_sentis[data_type][fn] = det_img_sentis[0]
-                        if data_type == 'senti':
-                            senti_imgs_num += 1
-                            if det_img_sentis[0] != senti_labels[i]:
-                                senti_imgs_wrong_num += 1
+            for senti in results:
+                json.dump(results[senti],
+                          open(os.path.join(result_dir, 'result_%d_%s.json' % (epoch, senti)), 'w'))
 
-            det_sentis_wrong_rate = senti_imgs_wrong_num / senti_imgs_num
-
-            for data_type in results:
-                for senti in results[data_type]:
-                    json.dump(results[data_type][senti],
-                              open(os.path.join(result_dir, 'result_%d_%s_%s.json' % (epoch, senti, data_type)), 'w'))
-                wr = det_sentis_wrong_rate
-                if data_type == 'fact':
-                    wr = 0
-                json.dump(det_sentis[data_type],
-                          open(os.path.join(result_dir, 'result_%d_sentis_%s_%s.json' % (epoch, wr, data_type)), 'w'))
-
-            sents = {'fact': defaultdict(str), 'senti': defaultdict(str)}
-            sents_w = {'fact': defaultdict(str), 'senti': defaultdict(str)}
-            for data_type in results:
-                for senti in results[data_type]:
-                    ress = results[data_type][senti]
-                    for res in ress:
-                        caption = res['caption']
-                        sents_w[data_type][senti] += caption + '\n'
-                        caption = [str(word2idx[w]) for w in caption.split()] + [str(word2idx['<EOS>'])]
-                        caption = ' '.join(caption) + '\n'
-                        sents[data_type][senti] += caption
-            for data_type in sents:
-                for senti in sents[data_type]:
-                    with open(os.path.join(result_dir, 'result_%d_%s_%s.txt' % (epoch, senti, data_type)), 'w') as f:
-                        f.write(sents[data_type][senti])
-                    with open(os.path.join(result_dir, 'result_%d_%s_%s_w.txt' % (epoch, senti, data_type)), 'w') as f:
-                        f.write(sents_w[data_type][senti])
+            sents = defaultdict(str)
+            sents_w = defaultdict(str)
+            for senti in results:
+                ress = results[senti]
+                for res in ress:
+                    caption = res['caption']
+                    sents_w[senti] += caption + '\n'
+                    caption = [str(word2idx[w]) for w in caption.split()] + [str(word2idx['<EOS>'])]
+                    caption = ' '.join(caption) + '\n'
+                    sents[senti] += caption
+            for senti in sents:
+                with open(os.path.join(result_dir, 'result_%d_%s.txt' % (epoch, senti)), 'w') as f:
+                    f.write(sents[senti])
+                with open(os.path.join(result_dir, 'result_%d_%s_w.txt' % (epoch, senti)), 'w') as f:
+                    f.write(sents_w[senti])
 
         if epoch > -1:
             chkpoint = {
