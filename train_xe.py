@@ -215,24 +215,6 @@ def train():
         with torch.no_grad():
             val_loss = forward(val_data, training=False)
 
-            senti_label = torch.LongTensor([captioner.neu_idx]).to(opt.device)
-            results = []
-            fact_txt = ''
-            for fns, region_feats, spatial_feats, _, cpts_tensor, sentis_tensor, _ in tqdm.tqdm(test_data):
-                region_feats = region_feats.to(opt.device)
-                spatial_feats = spatial_feats.to(opt.device)
-                cpts_tensor = cpts_tensor.to(opt.device)
-                sentis_tensor = sentis_tensor.to(opt.device)
-                for i, fn in enumerate(fns):
-                    captions, _ = captioner.sample(
-                        region_feats[i], spatial_feats[i], senti_label, cpts_tensor[i], sentis_tensor[i],
-                        beam_size=opt.beam_size)
-                    results.append({'image_id': fn, 'caption': captions[0]})
-                    fact_txt += captions[0] + '\n'
-            json.dump(results, open(os.path.join(result_dir, 'result_%d.json' % epoch), 'w'))
-            with open(os.path.join(result_dir, 'result_%d.txt' % epoch), 'w') as f:
-                f.write(fact_txt)
-
         if previous_loss is not None and val_loss['all_loss'] > previous_loss:
             lr = lr * 0.5
             for param_group in optimizer.param_groups:
@@ -240,7 +222,26 @@ def train():
         previous_loss = val_loss['all_loss']
 
         print('train_loss: %s, val_loss: %s' % (dict(train_loss), dict(val_loss)))
-        if epoch in [0, 10, 15, 20, 25, 29, 30, 35, 39]:
+        if epoch in [0, 5, 10, 15, 20, 25, 29, 30, 35, 39]:
+            with torch.no_grad():
+                senti_label = torch.LongTensor([captioner.neu_idx]).to(opt.device)
+                results = []
+                fact_txt = ''
+                for fns, region_feats, spatial_feats, _, cpts_tensor, sentis_tensor, _ in tqdm.tqdm(test_data):
+                    region_feats = region_feats.to(opt.device)
+                    spatial_feats = spatial_feats.to(opt.device)
+                    cpts_tensor = cpts_tensor.to(opt.device)
+                    sentis_tensor = sentis_tensor.to(opt.device)
+                    for i, fn in enumerate(fns):
+                        captions, _ = captioner.sample(
+                            region_feats[i], spatial_feats[i], senti_label, cpts_tensor[i], sentis_tensor[i],
+                            beam_size=opt.beam_size)
+                        results.append({'image_id': fn, 'caption': captions[0]})
+                        fact_txt += captions[0] + '\n'
+                json.dump(results, open(os.path.join(result_dir, 'result_%d.json' % epoch), 'w'))
+                with open(os.path.join(result_dir, 'result_%d.txt' % epoch), 'w') as f:
+                    f.write(fact_txt)
+
             chkpoint = {
                 'epoch': epoch,
                 'model': captioner.state_dict(),

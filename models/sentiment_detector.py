@@ -41,8 +41,8 @@ class SentimentDetector(nn.Module):
         out = output.softmax(dim=-1)  # [bz, num_sentis]
         shape = senti_features.shape
         senti_features = out.unsqueeze(1).bmm(
-            senti_features.view(shape[0], shape[1], -1))  # [bz, 1, 14*14]
-        senti_features = senti_features.view(shape[0], shape[2], shape[3])  # [bz, 14, 14]
+            senti_features.reshape(shape[0], shape[1], -1))  # [bz, 1, 14*14]
+        senti_features = senti_features.reshape(shape[0], shape[2], shape[3])  # [bz, 14, 14]
 
         return output, senti_features
 
@@ -52,7 +52,7 @@ class SentimentDetector(nn.Module):
         output, senti_features = self.forward(features)
         output = output.softmax(dim=-1)
         scores, senti_labels = output.max(dim=-1)  # bz
-        replace_idx = (scores < senti_threshold).nonzero(as_tuple=False).view(-1)
+        replace_idx = (scores < senti_threshold).nonzero(as_tuple=False).reshape(-1)
         senti_labels.index_copy_(0, replace_idx, senti_labels.new_zeros(len(replace_idx)).fill_(self.neu_idx))
 
         sentiments = []

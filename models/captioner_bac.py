@@ -27,7 +27,7 @@ class ContentAttention(nn.Module):
         p_att_feats = p_att_feats + h_att  # [bs, num_atts, att_hid]
         p_att_feats = p_att_feats.tanh()
         p_att_feats = self.att_alpha(p_att_feats).squeeze(-1)  # [bs, num_atts]
-        # p_att_feats = p_att_feats.view(-1, att_size)  # [bs, num_atts]
+        # p_att_feats = p_att_feats.reshape(-1, att_size)  # [bs, num_atts]
         weight = p_att_feats.softmax(-1)
         self.weights.append(weight)
 
@@ -205,7 +205,7 @@ class Captioner(nn.Module):
         # TODO
         # cpt_feats = self.drop(cpt_feats)
 
-        att_feats = att_feats.view(batch_size, -1, att_feats.shape[-1])  # [bs, num_atts, att_feat]
+        att_feats = att_feats.reshape(batch_size, -1, att_feats.shape[-1])  # [bs, num_atts, att_feat]
         att_feats = self.att_embed(att_feats)  # [bs, num_atts, feat_emb]
         att_feats = self.drop(att_feats)
         p_att_feats = self.att2att(att_feats)  # [bs, num_atts, att_hid]
@@ -222,10 +222,10 @@ class Captioner(nn.Module):
                 if sample_mask.sum() == 0:
                     it = captions[:, i].clone()  # bs
                 else:
-                    sample_ind = sample_mask.nonzero(as_tuple=False).view(-1)
+                    sample_ind = sample_mask.nonzero(as_tuple=False).reshape(-1)
                     it = captions[:, i].clone()  # bs
                     prob_prev = outputs[i - 1].detach().exp()  # bs*vocab_size, fetch prev distribution
-                    it.index_copy_(0, sample_ind, torch.multinomial(prob_prev, 1).view(-1).index_select(0, sample_ind))
+                    it.index_copy_(0, sample_ind, torch.multinomial(prob_prev, 1).reshape(-1).index_select(0, sample_ind))
             else:
                 it = captions[:, i].clone()  # bs
 
@@ -269,10 +269,10 @@ class Captioner(nn.Module):
                 if sample_mask.sum() == 0:
                     it = senti_captions[:, i].clone()  # bs
                 else:
-                    sample_ind = sample_mask.nonzero(as_tuple=False).view(-1)
+                    sample_ind = sample_mask.nonzero(as_tuple=False).reshape(-1)
                     it = senti_captions[:, i].clone()  # bs
                     prob_prev = outputs[i - 1].detach().exp()  # bs*vocab_size, fetch prev distribution
-                    it.index_copy_(0, sample_ind, torch.multinomial(prob_prev, 1).view(-1).index_select(0, sample_ind))
+                    it.index_copy_(0, sample_ind, torch.multinomial(prob_prev, 1).reshape(-1).index_select(0, sample_ind))
             else:
                 it = senti_captions[:, i].clone()  # bs
 
@@ -299,7 +299,7 @@ class Captioner(nn.Module):
         cpt_feats = self.cpt2fc(cpt_feats)  # [bs, feat_emb]
         self.cpt_feats = cpt_feats
 
-        att_feats = att_feats.view(batch_size, -1, att_feats.shape[-1])  # [bs, num_atts, att_feat]
+        att_feats = att_feats.reshape(batch_size, -1, att_feats.shape[-1])  # [bs, num_atts, att_feat]
         att_feats = self.att_embed(att_feats)  # [bs, num_atts, feat_emb]
         att_feats = self.drop(att_feats)
         p_att_feats = self.att2att(att_feats)  # [bs, num_atts, att_hid]
@@ -331,8 +331,8 @@ class Captioner(nn.Module):
                 prob_prev = torch.exp(logprobs)
                 it = torch.multinomial(prob_prev, 1)
                 sample_logprobs = logprobs.gather(1, it)  # gather the logprobs at sampled positions
-            it = it.view(-1).long()
-            sample_logprobs = sample_logprobs.view(-1)
+            it = it.reshape(-1).long()
+            sample_logprobs = sample_logprobs.reshape(-1)
 
             seq_masks[:, t] = unfinished
             it = it * unfinished.type_as(it)  # bs
@@ -351,8 +351,8 @@ class Captioner(nn.Module):
     def sample(self, fc_feat, att_feat, senti_words=None, senti_label=None,
                beam_size=3, decoding_constraint=1, max_seq_len=16):
         self.eval()
-        fc_feats = fc_feat.view(1, -1)  # [1, fc_feat]
-        att_feats = att_feat.view(1, -1, att_feat.shape[-1])  # [1, num_atts, att_feat]
+        fc_feats = fc_feat.reshape(1, -1)  # [1, fc_feat]
+        att_feats = att_feat.reshape(1, -1, att_feat.shape[-1])  # [1, num_atts, att_feat]
 
         fc_feats = self.fc_embed(fc_feats)  # [bs, feat_emb]
         fc_feats = self.drop(fc_feats)
@@ -362,7 +362,7 @@ class Captioner(nn.Module):
         p_att_feats = self.att2att(att_feats)  # [bs, num_atts, att_hid]
 
         if senti_words is not None:
-            senti_words = senti_words.view(1, -1)
+            senti_words = senti_words.reshape(1, -1)
             senti_words = torch.cat(
                 [senti_words.new_zeros(1, 1).fill_(self.pad_id), senti_words],
                 dim=1)  # [bs, num_stmts]

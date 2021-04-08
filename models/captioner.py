@@ -261,13 +261,13 @@ class Captioner(nn.Module):
 
         map_dim = int((spatial_feats.numel() // spatial_feats.size(0) // spatial_feats.size(-1)) ** 0.5)
         spatial_feats = spatial_feats.reshape(spatial_feats.size(0), map_dim, map_dim, spatial_feats.size(-1))
-        spatial_feats = spatial_feats.permute(0, 3, 1, 2)  # [bz, fc_feat_dim, 14, 14]
+        spatial_feats = spatial_feats.permute(0, 3, 1, 2).contiguous()  # [bz, fc_feat_dim, 14, 14]
         s_feats = []
         for i, senti_label in enumerate(senti_labels):
             senti_label = int(senti_label)
             head = self.vis_sen_encoder[senti_label]
             s_feat = head['conv'](spatial_feats[i:i+1])  # [1, 512, 6, 6]
-            s_feat = s_feat.squeeze(0).reshape(s_feat.size(1), -1).permute(1, 0)  # [36, 512]
+            s_feat = s_feat.squeeze(0).reshape(s_feat.size(1), -1).permute(1, 0).contiguous()  # [36, 512]
             s_feat = head['emb'](s_feat)  # [36, 512]
             s_feat = head['ln'](s_feat)  # [36, 512]
             s_feats.append(s_feat)
@@ -331,8 +331,8 @@ class Captioner(nn.Module):
                 prob_prev = torch.exp(logprobs)
                 it = torch.multinomial(prob_prev, 1)
                 sample_logprobs = logprobs.gather(1, it)  # gather the logprobs at sampled positions
-            it = it.view(-1).long()
-            sample_logprobs = sample_logprobs.view(-1)
+            it = it.reshape(-1).long()
+            sample_logprobs = sample_logprobs.reshape(-1)
 
             seq_masks[:, t] = unfinished
             it = it * unfinished.type_as(it)  # bs
