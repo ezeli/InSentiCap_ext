@@ -56,7 +56,7 @@ def train():
     for split, concepts in img_concepts.items():
         print('convert %s concepts to index' % split)
         img_concepts_id[split] = {}
-        for fn, cpts in tqdm.tqdm(concepts.items()):
+        for fn, cpts in tqdm.tqdm(concepts.items(), ncols=100):
             cpts = [concept2idx[c] for c in cpts if c in concept2idx]
             img_concepts_id[split][fn] = cpts
     img_concepts = img_concepts_id
@@ -76,7 +76,7 @@ def train():
     def forward(data, training=True):
         cpt_detector.train(training)
         loss_val = 0.0
-        for _, fc_feats, cpts_tensors in tqdm.tqdm(data):
+        for _, fc_feats, cpts_tensors in tqdm.tqdm(data, ncols=100):
             fc_feats = fc_feats.to(opt.device)
             cpts_tensors = cpts_tensors.to(opt.device)
             pred = cpt_detector(fc_feats)
@@ -104,7 +104,7 @@ def train():
             pre = 0.0
             recall = 0.0
             last_score = 0.0
-            for fns, fc_feats, cpts_tensors in tqdm.tqdm(test_data):
+            for fns, fc_feats, cpts_tensors in tqdm.tqdm(test_data, ncols=100):
                 fc_feats = fc_feats.to(opt.device)
                 cpts_tensors = cpts_tensors.to(opt.device)
                 pred, concepts, scores = cpt_detector.sample(fc_feats, num=opt.num_concepts)

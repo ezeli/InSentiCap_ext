@@ -12,7 +12,9 @@ import torch
 import random
 
 from opts import parse_opt
+from models.captioner import Captioner
 from models.decoder import Detector
+from models.sent_senti_cls import SentenceSentimentClassifier
 from dataloader import get_caption_dataloader, get_senti_corpus_with_sentis_dataloader
 
 
@@ -27,13 +29,16 @@ def train():
     corpus_type = opt.corpus_type
 
     idx2word = json.load(open(os.path.join(opt.captions_dir, dataset_name, corpus_type, 'idx2word.json'), 'r'))
-    img_captions = json.load(open(os.path.join(opt.captions_dir, dataset_name, 'img_captions.json'), 'r'))
+    img_captions = json.load(open(os.path.join(opt.captions_dir, dataset_name, corpus_type, 'img_captions_senti.json'), 'r'))
+    vis_sentiments = json.load(open(os.path.join(opt.captions_dir, dataset_name, 'vis_sentiments.json'), 'r'))
     img_det_concepts = json.load(open(os.path.join(opt.captions_dir, dataset_name, 'img_det_concepts.json'), 'r'))
     img_det_sentiments = json.load(open(os.path.join(opt.captions_dir, dataset_name, corpus_type, 'img_det_sentiments.json'), 'r'))
     senti_captions = json.load(open(os.path.join(opt.captions_dir, dataset_name, corpus_type, 'senti_captions.json'), 'r'))
 
-    model = Detector(idx2word, opt.max_seq_len, opt.sentiment_categories, opt.rl_lrs, opt.settings)
-    model.to(opt.device)
+    captioner = Captioner(idx2word, opt.sentiment_categories, opt.settings)
+    captioner.to(opt.device)
+    lr = opt.rl_lr
+    optimizer, _, _ = captioner.get_optim_criterion(lr)
     if opt.rl_resume:
         print("====> loading checkpoint '{}'".format(opt.rl_resume))
         chkpoint = torch.load(opt.rl_resume, map_location=lambda s, l: s)
@@ -49,7 +54,9 @@ def train():
             'dataset_name and resume model dataset_name are different'
         assert corpus_type == chkpoint['corpus_type'], \
             'corpus_type and resume model corpus_type are different'
-        model.load_state_dict(chkpoint['model'])
+        captioner.load_state_dict(chkpoint['model'])
+        optimizer.load_state_dict(chkpoint['optimizer'])
+        lr = optimizer.param_groups[0]['lr']
         print("====> loaded checkpoint '{}', epoch: {}"
               .format(opt.rl_resume, chkpoint['epoch']))
     else:
@@ -66,60 +73,66 @@ def train():
             'dataset_name and resume model dataset_name are different'
         assert corpus_type == chkpoint['corpus_type'], \
             'corpus_type and resume model corpus_type are different'
-        model.captioner.load_state_dict(chkpoint['model'])
+        captioner.load_state_dict(chkpoint['model'])
         print("====> loaded checkpoint '{}', epoch: {}"
               .format(rl_xe_resume, chkpoint['epoch']))
 
-        if True:
-            print("====> loading rl_senti_resume '{}'".format(opt.rl_senti_resume))
-            ch = torch.load(opt.rl_senti_resume, map_location=lambda s, l: s)
-            assert opt.sentiment_categories == ch['sentiment_categories'], \
-                'opt.sentiment_categories and rl_senti_resume sentiment_categories are different'
-            model.senti_detector.load_state_dict(ch['model'])
-
-        if True:
-            ss_cls_file = os.path.join(opt.checkpoint, 'sent_senti_cls', dataset_name, corpus_type, 'model-best.pth')
-            print("====> loading checkpoint '{}'".format(ss_cls_file))
-            chkpoint = torch.load(ss_cls_file, map_location=lambda s, l: s)
-            assert idx2word == chkpoint['idx2word'], \
-                'idx2word and resume model idx2word are different'
-            assert opt.sentiment_categories == chkpoint['sentiment_categories'], \
-                'opt.sentiment_categories and resume model sentiment_categories are different'
-            assert dataset_name == chkpoint['dataset_name'], \
-                'dataset_name and resume model dataset_name are different'
-            assert corpus_type == chkpoint['corpus_type'], \
-                'corpus_type and resume model corpus_type are different'
-            model.sent_senti_cls.load_state_dict(chkpoint['model'])
+    sent_senti_cls = SentenceSentimentClassifier(idx2word, opt.sentiment_categories, opt.settings)
+    sent_senti_cls.to(opt.device)
+    ss_cls_file = os.path.join(opt.checkpoint, 'sent_senti_cls', dataset_name, corpus_type, 'model-best.pth')
+    print("====> loading checkpoint '{}'".format(ss_cls_file))
+    chkpoint = torch.load(ss_cls_file, map_location=lambda s, l: s)
+    assert idx2word == chkpoint['idx2word'], \
+        'idx2word and resume model idx2word are different'
+    assert opt.sentiment_categories == chkpoint['sentiment_categories'], \
+        'opt.sentiment_categories and resume model sentiment_categories are different'
+    assert dataset_name == chkpoint['dataset_name'], \
+        'dataset_name and resume model dataset_name are different'
+    assert corpus_type == chkpoint['corpus_type'], \
+        'corpus_type and resume model corpus_type are different'
+    sent_senti_cls.load_state_dict(chkpoint['model'])
+    sent_senti_cls.eval()
 
     word2idx = {}
     for i, w in enumerate(idx2word):
         word2idx[w] = i
+
+    senti_label2idx = {}
+    for i, w in enumerate(opt.sentiment_categories):
+        senti_label2idx[w] = i
 
     print('====> process image captions begin')
     captions_id = {}
     for split, caps in img_captions.items():
         print('convert %s captions to index' % split)
         captions_id[split] = {}
-        for fn, seqs in tqdm.tqdm(caps.items()):
+        for fn, seqs in tqdm.tqdm(caps.items(), ncols=100):
             tmp = []
-            for seq in seqs:
-                tmp.append([model.captioner.sos_id] +
-                           [word2idx.get(w, None) or word2idx['<UNK>'] for w in seq] +
-                           [model.captioner.eos_id])
+            for seq, senti in seqs:
+                tmp.append([[captioner.sos_id] +
+                            [word2idx.get(w, None) or word2idx['<UNK>'] for w in seq] +
+                            [captioner.eos_id], senti_label2idx[senti]])
             captions_id[split][fn] = tmp
     img_captions = captions_id
     print('====> process image captions end')
 
+    print('====> process vis_sentiments begin')
+    vis_sentiments_di = {}
+    for fn, senti in tqdm.tqdm(vis_sentiments.items(), ncols=100):
+        vis_sentiments_di[fn] = senti_label2idx[senti]
+    vis_sentiments = vis_sentiments_di
+    print('====> process vis_sentiments end')
+
     print('====> process image det_concepts begin')
     det_concepts_id = {}
-    for fn, cpts in tqdm.tqdm(img_det_concepts.items()):
+    for fn, cpts in tqdm.tqdm(img_det_concepts.items(), ncols=100):
         det_concepts_id[fn] = [word2idx[w] for w in cpts]
     img_det_concepts = det_concepts_id
     print('====> process image det_concepts end')
 
     print('====> process image det_sentiments begin')
     det_sentiments_id = {}
-    for fn, sentis in tqdm.tqdm(img_det_sentiments.items()):
+    for fn, sentis in tqdm.tqdm(img_det_sentiments.items(), ncols=100):
         det_sentiments_id[fn] = [word2idx[w] for w in sentis]
     img_det_sentiments = det_sentiments_id
     print('====> process image det_concepts end')
@@ -128,16 +141,17 @@ def train():
     for i, w in enumerate(opt.sentiment_categories):
         senti_label2idx[w] = i
     print('====> process senti corpus begin')
-    senti_captions['positive'] = senti_captions['positive'] * int(len(senti_captions['neutral']) / len(senti_captions['positive']))
-    senti_captions['negative'] = senti_captions['negative'] * int(len(senti_captions['neutral']) / len(senti_captions['negative']))
+    # senti_captions['positive'] = senti_captions['positive'] * int(len(senti_captions['neutral']) / len(senti_captions['positive']))
+    # senti_captions['negative'] = senti_captions['negative'] * int(len(senti_captions['neutral']) / len(senti_captions['negative']))
+    del senti_captions['neutral']
     senti_captions_id = []
     for senti, caps in senti_captions.items():
         print('convert %s corpus to index' % senti)
         senti_id = senti_label2idx[senti]
-        for cap, cpts, sentis in tqdm.tqdm(caps):
-            cap = [model.captioner.sos_id] +\
+        for cap, cpts, sentis in tqdm.tqdm(caps, ncols=100):
+            cap = [captioner.sos_id] +\
                   [word2idx.get(w, None) or word2idx['<UNK>'] for w in cap] +\
-                  [model.captioner.eos_id]
+                  [captioner.eos_id]
             cpts = [word2idx[w] for w in cpts if w in word2idx]
             sentis = [word2idx[w] for w in sentis]
             senti_captions_id.append([cap, cpts, sentis, senti_id])
@@ -147,11 +161,11 @@ def train():
 
     region_feats = os.path.join(opt.feats_dir, dataset_name, '%s_36_att.h5' % dataset_name)
     spatial_feats = os.path.join(opt.feats_dir, dataset_name, '%s_att.h5' % dataset_name)
-    train_data = get_caption_dataloader(region_feats, spatial_feats, img_captions['train'],
+    train_data = get_caption_dataloader(region_feats, spatial_feats, img_captions['train'], vis_sentiments,
                                         img_det_concepts, img_det_sentiments, idx2word.index('<PAD>'),
                                         opt.max_seq_len, opt.num_concepts, opt.num_sentiments,
                                         opt.xe_bs, opt.xe_num_works, mode='rl')
-    val_data = get_caption_dataloader(region_feats, spatial_feats, img_captions['val'],
+    val_data = get_caption_dataloader(region_feats, spatial_feats, img_captions['val'], vis_sentiments,
                                       img_det_concepts, img_det_sentiments, idx2word.index('<PAD>'),
                                       opt.max_seq_len, opt.num_concepts, opt.num_sentiments, opt.xe_bs,
                                       opt.xe_num_works, shuffle=False, mode='rl')
@@ -161,8 +175,8 @@ def train():
 
     test_captions = {}
     for fn in img_captions['test']:
-        test_captions[fn] = [[]]
-    test_data = get_caption_dataloader(region_feats, spatial_feats, test_captions,
+        test_captions[fn] = [[[], -1]]
+    test_data = get_caption_dataloader(region_feats, spatial_feats, test_captions, vis_sentiments,
                                        img_det_concepts, img_det_sentiments, idx2word.index('<PAD>'),
                                        opt.max_seq_len, opt.num_concepts, opt.num_sentiments, opt.xe_bs,
                                        opt.xe_num_works, shuffle=False, mode='rl')
@@ -171,10 +185,10 @@ def train():
     # for senti, i in senti_label2idx.items():
     #     lms[i] = kenlm.LanguageModel(os.path.join(lm_dir, '%s_id.kenlm.arpa' % senti))
     # model.set_lms(lms)
-
+    model = Detector(captioner, optimizer, sent_senti_cls)
     model.set_ciderd_scorer(img_captions)
 
-    tmp_dir = '04cls_500'
+    tmp_dir = '10cls_all'
     checkpoint = os.path.join(opt.checkpoint, 'rl', dataset_name, corpus_type, tmp_dir)
     if not os.path.exists(checkpoint):
         os.makedirs(checkpoint)
@@ -185,28 +199,30 @@ def train():
         print('--------------------epoch: %d' % epoch)
         print('tmp_dir:', tmp_dir, 'cls_flag:', model.cls_flag, 'seq_flag:', model.seq_flag)
         torch.cuda.empty_cache()
-        train_loss = model((train_data, scs_data), training=True)
+        train_loss = model.forward((train_data, scs_data), training=True)
         print('train_loss: %s' % dict(train_loss))
 
         with torch.no_grad():
             torch.cuda.empty_cache()
-            val_loss = model((val_data,), training=False)
+            val_loss = model.forward((val_data,), training=False)
             print('val_loss:', dict(val_loss))
 
             # test
             results = defaultdict(list)
             det_sentis = {}
-            for fns, region_feats, spatial_feats, _, cpts_tensor, sentis_tensor, _ in tqdm.tqdm(test_data):
+            for fns, vis_sentis, region_feats, spatial_feats, _, _, cpts_tensor, sentis_tensor, _ in tqdm.tqdm(test_data, ncols=100):
+                vis_sentis = vis_sentis.to(opt.device)
                 region_feats = region_feats.to(opt.device)
                 spatial_feats = spatial_feats.to(opt.device)
                 cpts_tensor = cpts_tensor.to(opt.device)
                 sentis_tensor = sentis_tensor.to(opt.device)
                 for i, fn in enumerate(fns):
-                    captions, det_img_sentis = model.sample(
-                        region_feats[i], spatial_feats[i], cpts_tensor[i], sentis_tensor[i],
+                    captions, _ = model.captioner.sample(
+                        region_feats[i], spatial_feats[i], vis_sentis[i], cpts_tensor[i], sentis_tensor[i],
                         beam_size=opt.beam_size)
-                    results[det_img_sentis[0]].append({'image_id': fn, 'caption': captions[0]})
-                    det_sentis[fn] = det_img_sentis[0]
+                    det_img_senti = opt.sentiment_categories[int(vis_sentis[i])]
+                    results[det_img_senti].append({'image_id': fn, 'caption': captions[0]})
+                    det_sentis[fn] = det_img_senti
 
             for senti in results:
                 json.dump(results[senti],
@@ -231,7 +247,8 @@ def train():
         if epoch > -1:
             chkpoint = {
                 'epoch': epoch,
-                'model': model.state_dict(),
+                'model': captioner.state_dict(),
+                'optimizer': optimizer.state_dict(),
                 'settings': opt.settings,
                 'idx2word': idx2word,
                 'max_seq_len': opt.max_seq_len,

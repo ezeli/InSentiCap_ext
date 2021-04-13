@@ -32,7 +32,7 @@ senti_fc = h5py.File(os.path.join(opt.feats_dir, 'sentiment', 'feats_fc.h5'), 'r
 predict_result = {}
 for fc in [fact_fc, senti_fc]:
     fns = list(fc.keys())
-    for i in tqdm.tqdm(range(0, len(fns), 100)):
+    for i in tqdm.tqdm(range(0, len(fns), 100), ncols=100):
         cur_fns = fns[i:i + 100]
         feats = []
         for fn in cur_fns:

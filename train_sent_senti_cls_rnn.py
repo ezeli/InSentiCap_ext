@@ -85,11 +85,11 @@ def train():
     for senti in opt.sentiment_categories:
         print('convert %s corpus to index' % senti)
         senti_id = senti_label2idx[senti]
-        for cap in tqdm.tqdm(senti_captions['train'][senti]):
+        for cap in tqdm.tqdm(senti_captions['train'][senti], ncols=100):
             tmp = [word2idx.get(w, None) or word2idx['<UNK>'] for w in cap] + [word2idx['<EOS>']]
             train_set.append([senti_id, tmp])
         val_set[senti] = []
-        for cap in tqdm.tqdm(senti_captions['val'][senti]):
+        for cap in tqdm.tqdm(senti_captions['val'][senti], ncols=100):
             tmp = [word2idx.get(w, None) or word2idx['<UNK>'] for w in cap] + [word2idx['<EOS>']]
             val_set[senti].append([senti_id, tmp])
     random.shuffle(train_set)
@@ -111,7 +111,7 @@ def train():
         print('--------------------epoch: %d' % epoch)
         model.train()
         train_loss = 0.0
-        for sentis, (caps_tensor, lengths) in tqdm.tqdm(train_data):
+        for sentis, (caps_tensor, lengths) in tqdm.tqdm(train_data, ncols=100):
             sentis = sentis.to(opt.device)
             caps_tensor = caps_tensor.to(opt.device)
 
@@ -133,7 +133,7 @@ def train():
             senti_num[senti] = defaultdict(int)
         with torch.no_grad():
             for senti, data in val_data.items():
-                for sentis, (caps_tensor, lengths) in tqdm.tqdm(data):
+                for sentis, (caps_tensor, lengths) in tqdm.tqdm(data, ncols=100):
                     sentis = sentis.to(opt.device)
                     caps_tensor = caps_tensor.to(opt.device)
 

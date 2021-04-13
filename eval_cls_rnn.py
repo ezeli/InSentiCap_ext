@@ -56,7 +56,7 @@ def compute_cls(captions_file_prefix):
         all_num = 0
         wrong_num = 0
         with torch.no_grad():
-            for sentis, (caps_tensor, lengths) in tqdm.tqdm(val_data):
+            for sentis, (caps_tensor, lengths) in tqdm.tqdm(val_data, ncols=100):
                 sentis = sentis.to(device)
                 caps_tensor = caps_tensor.to(device)
 

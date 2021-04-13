@@ -34,7 +34,7 @@ def extract_imgs_feat():
     with h5py.File(os.path.join(opt.feats_dir, 'feats_fc.h5')) as file_fc, \
             h5py.File(os.path.join(opt.feats_dir, 'feats_att.h5')) as file_att:
         try:
-            for img_nm in tqdm.tqdm(imgs):
+            for img_nm in tqdm.tqdm(imgs, ncols=100):
                 img = skimage.io.imread(os.path.join(opt.imgs_dir, img_nm))
                 if len(img.shape) == 3 and img.shape[-1] == 4:
                     img = img[:, :, :3]
@@ -58,7 +58,7 @@ def process_caption_datasets():
         img_captions = {'train': {}, 'val': {}, 'test': {}}
         img_captions_pos = {'train': {}, 'val': {}, 'test': {}}
         img_concepts = {'train': {}, 'val': {}, 'test': {}}
-        for image in tqdm.tqdm(images):
+        for image in tqdm.tqdm(images, ncols=100):
             fn = image['filename']
             split = image['split']
             if split == 'restval':
@@ -102,7 +102,7 @@ def process_senti_corpus():
     sentiment_detector = defaultdict(Counter)
 
     for senti_label, sents in senti_corpus.items():
-        for i in tqdm.tqdm(range(0, len(sents), 100)):
+        for i in tqdm.tqdm(range(0, len(sents), 100), ncols=100):
             cur_sents = sents[i:i + 100]
             tmp_sents = []
             for sent in cur_sents:
@@ -219,7 +219,7 @@ def build_idx2concept():
         img_concepts = json.load(open(os.path.join(opt.captions_dir, dataset_nm, 'img_concepts.json'), 'r'))
         tc = Counter()
         for concepts in img_concepts.values():
-            for cs in tqdm.tqdm(concepts.values()):
+            for cs in tqdm.tqdm(concepts.values(), ncols=100):
                 tc.update(cs)
         tc = tc.most_common()
         idx2concept = [w[0] for w in tc[:2000]]
@@ -286,7 +286,7 @@ def get_img_det_sentiments():
         det_concepts = json.load(open(os.path.join(opt.captions_dir, dataset_nm, 'img_det_concepts.json'), 'r'))
         det_sentiments = {}
         null_sentis = []
-        for fn, concepts in tqdm.tqdm(det_concepts.items()):
+        for fn, concepts in tqdm.tqdm(det_concepts.items(), ncols=100):
             sentis = []
             for con in concepts:
                 sentis.extend(sentiment_detector.get(con, []))
@@ -352,7 +352,7 @@ def get_senti_captions():
         img_captions = json.load(open(os.path.join(opt.captions_dir, dataset_nm, 'img_captions.json'), 'r'))['train']
         img_captions_pos = json.load(open(os.path.join(opt.captions_dir, dataset_nm, 'img_captions_pos.json'), 'r'))['train']
         fact_caps = []
-        for fn, caps in tqdm.tqdm(img_captions.items()):
+        for fn, caps in tqdm.tqdm(img_captions.items(), ncols=100):
             for i, cap in enumerate(caps):
                 flag = True
                 for w in cap:
@@ -395,7 +395,7 @@ def get_anno_captions():
     for dataset_nm in opt.dataset_names:
         images = json.load(open(os.path.join(opt.caption_datasets_dir, 'dataset_%s.json' % dataset_nm), 'r'))['images']
         anno_captions = {}
-        for image in tqdm.tqdm(images):
+        for image in tqdm.tqdm(images, ncols=100):
             if image['split'] == 'test':
                 fn = image['filename']
                 sentences = []

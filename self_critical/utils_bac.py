@@ -41,7 +41,7 @@ def get_ciderd_scorer(split_captions, sos_token, eos_token):
         captions.update(caps)
 
     refs_idxs = []
-    for caps in tqdm.tqdm(captions.values()):
+    for caps in tqdm.tqdm(captions.values(), ncols=100):
         ref_idxs = []
         for cap in caps:
             ref_idxs.append(_array_to_str(cap, sos_token, eos_token))

@@ -49,7 +49,7 @@ def train():
     for split, senti_labels in img_senti_labels.items():
         print('convert %s senti_labels to index' % split)
         senti_labels_id[split] = []
-        for fn, senti_label in tqdm.tqdm(senti_labels):
+        for fn, senti_label in tqdm.tqdm(senti_labels, ncols=100):
             senti_labels_id[split].append([fn, senti_label2idx[senti_label]])
     img_senti_labels = senti_labels_id
     print('====> process image senti_labels end')
@@ -68,7 +68,7 @@ def train():
     def forward(data, training=True):
         senti_detector.train(training)
         loss_val = 0.0
-        for _, att_feats, labels in tqdm.tqdm(data):
+        for _, att_feats, labels in tqdm.tqdm(data, ncols=100):
             att_feats = att_feats.to(opt.device)
             labels = labels.to(opt.device)
             # (det_out, cls_out), _ = senti_detector(att_feats)
@@ -99,7 +99,7 @@ def train():
             # test
             corr_num = 0
             all_num = 0
-            for _, att_feats, labels in tqdm.tqdm(test_data):
+            for _, att_feats, labels in tqdm.tqdm(test_data, ncols=100):
                 att_feats = att_feats.to(opt.device)
                 labels = labels.to(opt.device)
                 idx, _, _, _ = senti_detector.sample(att_feats)

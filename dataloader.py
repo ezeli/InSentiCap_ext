@@ -11,17 +11,19 @@ def create_collate_fn(name, pad_index=0, max_seq_len=17, num_concepts=5,
     def caption_collate_fn(dataset):
         ground_truth = {}
         tmp = []
-        for fn, region_feat, spatial_feat, caps_idx, cpts_idx, sentis_idx in dataset:
-            ground_truth[fn] = [c[:max_seq_len] for c in caps_idx]
+        for fn, vis_senti, region_feat, spatial_feat, caps_idx, cpts_idx, sentis_idx in dataset:
+            ground_truth[fn] = [c[0][:max_seq_len] for c in caps_idx]
             if mode == 'rl':
                 caps_idx = random.sample(caps_idx, 1)
-            for cap in caps_idx:
-                tmp.append([fn, region_feat, spatial_feat, cap, cpts_idx, sentis_idx])
+            for cap, senti in caps_idx:
+                tmp.append([fn, vis_senti, region_feat, spatial_feat, cap, senti, cpts_idx, sentis_idx])
         dataset = tmp
-        dataset.sort(key=lambda p: len(p[3]), reverse=True)
-        fns, region_feats, spatial_feats, caps, cpts, sentis = zip(*dataset)
+        dataset.sort(key=lambda p: len(p[4]), reverse=True)
+        fns, vis_sentis, region_feats, spatial_feats, caps, xe_senti_labels, cpts, sentis = zip(*dataset)
         region_feats = torch.FloatTensor(np.array(region_feats))
         spatial_feats = torch.FloatTensor(np.array(spatial_feats))
+        vis_sentis = torch.LongTensor(np.array(vis_sentis))
+        xe_senti_labels = torch.LongTensor(np.array(xe_senti_labels))
 
         lengths = [min(len(c), max_seq_len) for c in caps]
         caps_tensor = torch.LongTensor(len(caps), lengths[0]).fill_(pad_index)
@@ -40,7 +42,7 @@ def create_collate_fn(name, pad_index=0, max_seq_len=17, num_concepts=5,
             end = min(len(s), num_sentiments)
             sentis_tensor[i, :end] = torch.LongTensor(s[:end])
 
-        return fns, region_feats, spatial_feats, (caps_tensor, lengths), cpts_tensor, sentis_tensor, ground_truth
+        return fns, vis_sentis, region_feats, spatial_feats, (caps_tensor, lengths), xe_senti_labels, cpts_tensor, sentis_tensor, ground_truth
 
     def scs_collate_fn(dataset):
         dataset.sort(key=lambda p: len(p[0]), reverse=True)
@@ -116,22 +118,24 @@ class SCSDataset(data.Dataset):
 
 
 class CaptionDataset(data.Dataset):
-    def __init__(self, region_feats, spatial_feats, img_captions, img_det_concepts, img_det_sentiments):
+    def __init__(self, region_feats, spatial_feats, img_captions, vis_sentiments, img_det_concepts, img_det_sentiments):
         self.region_feats = region_feats
         self.spatial_feats = spatial_feats
         self.captions = list(img_captions.items())  # [(fn, [[1, 2],[3, 4],...]),...]
+        self.vis_sentiments = vis_sentiments
         self.det_concepts = img_det_concepts  # {fn: [1,2,...])}
         self.det_sentiments = img_det_sentiments  # {fn: [1,2,...])}
 
     def __getitem__(self, index):
         fn, caps = self.captions[index]
+        vis_senti = self.vis_sentiments.get(fn, -1)
         region_feats = h5py.File(self.region_feats, mode='r')
         spatial_feats = h5py.File(self.spatial_feats, mode='r')
         region_feats = region_feats[fn][:]
         spatial_feats = spatial_feats[fn][:]
         cpts = self.det_concepts[fn]
         sentis = self.det_sentiments[fn]
-        return fn, np.array(region_feats), np.array(spatial_feats), caps, cpts, sentis
+        return fn, vis_senti, np.array(region_feats), np.array(spatial_feats), caps, cpts, sentis
 
     def __len__(self):
         return len(self.captions)
@@ -182,11 +186,11 @@ class SentiSentDataset(data.Dataset):
         return len(self.senti_sentences)
 
 
-def get_caption_dataloader(region_feats, spatial_feats, img_captions,
+def get_caption_dataloader(region_feats, spatial_feats, img_captions, vis_sentiments,
                            img_det_concepts, img_det_sentiments,
                            pad_index, max_seq_len, num_concepts, num_sentiments,
                            batch_size, num_workers=0, shuffle=True, mode='xe'):
-    dataset = CaptionDataset(region_feats, spatial_feats, img_captions, img_det_concepts, img_det_sentiments)
+    dataset = CaptionDataset(region_feats, spatial_feats, img_captions, vis_sentiments, img_det_concepts, img_det_sentiments)
     dataloader = data.DataLoader(dataset,
                                  batch_size=batch_size,
                                  shuffle=shuffle,
