@@ -26,7 +26,6 @@ class Detector():
 
         self.cls_flag = 1.0
         self.seq_flag = 1.0
-        self.senti_threshold = 0.7
 
     def set_ciderd_scorer(self, captions):
         self.ciderd_scorer = get_ciderd_scorer(captions, self.captioner.sos_id, self.captioner.eos_id)
@@ -69,8 +68,7 @@ class Detector():
             all_losses['fact_reward'] += float(fact_reward[:, 0].mean())
 
             cls_reward = get_cls_reward(
-                sample_captions, seq_masks, greedy_captions, greedy_masks,
-                vis_sentis, self.sent_senti_cls)   # [bs, num_sentis]
+                sample_captions, seq_masks, vis_sentis, self.sent_senti_cls, self.captioner.neu_idx)   # [bs, num_sentis]
             cls_reward = torch.from_numpy(cls_reward).float().to(device)
             all_losses['cls_reward'] += float(cls_reward.mean(-1).mean(-1))
 

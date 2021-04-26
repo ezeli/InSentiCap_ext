@@ -94,9 +94,9 @@ def train():
     print('====> process image det_concepts end')
 
     print('====> process senti corpus begin')
-    # senti_captions['positive'] = senti_captions['positive'] * int(len(senti_captions['neutral']) / len(senti_captions['positive']))
-    # senti_captions['negative'] = senti_captions['negative'] * int(len(senti_captions['neutral']) / len(senti_captions['negative']))
-    del senti_captions['neutral']
+    senti_captions['positive'] = senti_captions['positive'] * int(len(senti_captions['neutral']) / len(senti_captions['positive']))
+    senti_captions['negative'] = senti_captions['negative'] * int(len(senti_captions['neutral']) / len(senti_captions['negative']))
+    # del senti_captions['neutral']
     senti_captions_id = []
     for senti, caps in senti_captions.items():
         print('convert %s corpus to index' % senti)
@@ -202,7 +202,7 @@ def train():
         previous_loss = val_loss['all_loss']
 
         print('train_loss: %s, val_loss: %s' % (dict(train_loss), dict(val_loss)))
-        if epoch in [0, 5, 10, 15, 20, 25, 29, 30, 35, 39]:
+        if epoch > -1:
             with torch.no_grad():
                 senti_label = torch.LongTensor([captioner.neu_idx]).to(opt.device)
                 results = []

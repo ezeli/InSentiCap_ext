@@ -15,10 +15,16 @@ def compute_ppl(captions_file_prefix):
     corpus_type = 'part'
     if 'full' in captions_file_prefix:
         corpus_type = 'full'
+    train_mode = 'rl'
+    if 'xe' in captions_file_prefix:
+        train_mode = 'xe'
 
     lm_cmds = {}
     for senti in sentis:
-        lm_cmds[senti] = lm_cmd % ('%s_%s_w.txt' % (captions_file_prefix, senti), dataset_name, corpus_type, senti)
+        if train_mode == 'rl':
+            lm_cmds[senti] = lm_cmd % ('%s_%s_w.txt' % (captions_file_prefix, senti), dataset_name, corpus_type, senti)
+        else:
+            lm_cmds[senti] = lm_cmd % ('%s.txt' % captions_file_prefix, dataset_name, corpus_type, senti)
     # print('lm cms:', lm_cmds)
     scores = {}
     for senti, cmd in lm_cmds.items():

@@ -77,8 +77,6 @@ def train():
         print("====> loaded checkpoint '{}', epoch: {}"
               .format(rl_xe_resume, chkpoint['epoch']))
 
-    sent_senti_cls = SentenceSentimentClassifier(idx2word, opt.sentiment_categories, opt.settings)
-    sent_senti_cls.to(opt.device)
     ss_cls_file = os.path.join(opt.checkpoint, 'sent_senti_cls', dataset_name, corpus_type, 'model-best.pth')
     print("====> loading checkpoint '{}'".format(ss_cls_file))
     chkpoint = torch.load(ss_cls_file, map_location=lambda s, l: s)
@@ -90,6 +88,8 @@ def train():
         'dataset_name and resume model dataset_name are different'
     assert corpus_type == chkpoint['corpus_type'], \
         'corpus_type and resume model corpus_type are different'
+    sent_senti_cls = SentenceSentimentClassifier(chkpoint['idx2word'], chkpoint['sentiment_categories'], chkpoint['settings'])
+    sent_senti_cls.to(opt.device)
     sent_senti_cls.load_state_dict(chkpoint['model'])
     sent_senti_cls.eval()
 
@@ -141,9 +141,9 @@ def train():
     for i, w in enumerate(opt.sentiment_categories):
         senti_label2idx[w] = i
     print('====> process senti corpus begin')
-    # senti_captions['positive'] = senti_captions['positive'] * int(len(senti_captions['neutral']) / len(senti_captions['positive']))
-    # senti_captions['negative'] = senti_captions['negative'] * int(len(senti_captions['neutral']) / len(senti_captions['negative']))
-    del senti_captions['neutral']
+    senti_captions['positive'] = senti_captions['positive'] * int(len(senti_captions['neutral']) / len(senti_captions['positive']))
+    senti_captions['negative'] = senti_captions['negative'] * int(len(senti_captions['neutral']) / len(senti_captions['negative']))
+    # del senti_captions['neutral']
     senti_captions_id = []
     for senti, caps in senti_captions.items():
         print('convert %s corpus to index' % senti)
@@ -218,7 +218,7 @@ def train():
                 sentis_tensor = sentis_tensor.to(opt.device)
                 for i, fn in enumerate(fns):
                     captions, _ = model.captioner.sample(
-                        region_feats[i], spatial_feats[i], vis_sentis[i], cpts_tensor[i], sentis_tensor[i],
+                        region_feats[i], spatial_feats[i], vis_sentis[i:i+1], cpts_tensor[i], sentis_tensor[i],
                         beam_size=opt.beam_size)
                     det_img_senti = opt.sentiment_categories[int(vis_sentis[i])]
                     results[det_img_senti].append({'image_id': fn, 'caption': captions[0]})

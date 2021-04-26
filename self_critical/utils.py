@@ -100,54 +100,23 @@ def get_lm_reward(sample_captions, greedy_captions, senti_labels, sos_token, eos
     return rewards
 
 
-# def get_cls_reward(sample_captions, greedy_captions, senti_labels, sos_token, eos_token, sent_senti_cls):
-#     batch_size = sample_captions.size(0)
-#     sample_captions = sample_captions.cpu().numpy()
-#     greedy_captions = greedy_captions.cpu().numpy()
-#     senti_labels = senti_labels.cpu().numpy()
-#     scores = []
-#     for i in range(batch_size):
-#         sample_feat = _extract_feature(sample_captions[i], sos_token, eos_token)
-#         greedy_feat = _extract_feature(greedy_captions[i], sos_token, eos_token)
-#         prob_rests = sent_senti_cls.prob_classify_many([sample_feat, greedy_feat])
-#         scores.append(prob_rests[0]._prob_dict[senti_labels[i]] -
-#                       prob_rests[1]._prob_dict[senti_labels[i]])
-#     scores = np.array(scores)
-#     rewards = np.repeat(scores[:, np.newaxis], sample_captions.shape[1], 1)
-#     return rewards
-
-
-def get_cls_reward(sample_captions, sample_masks, greedy_captions, greedy_masks, senti_labels, sent_senti_cls):
+def get_cls_reward(sample_captions, sample_masks, senti_labels, sent_senti_cls, neu_idx):
     training = sent_senti_cls.training
     sample_lens = list(sample_masks.sum(dim=-1).type(torch.int).cpu().numpy())
-    # greedy_lens = list(greedy_masks.sum(dim=-1).type(torch.int).cpu().numpy())
     sent_senti_cls.eval()
     with torch.no_grad():
         sample_preds, sample_att_weights = sent_senti_cls(sample_captions, sample_lens)
-        sample_preds = sample_preds.softmax(dim=-1)
         sample_preds = sample_preds.argmax(dim=-1)
         sample_preds = (sample_preds == senti_labels).type_as(sample_att_weights)
+        # sample_preds = (sample_preds == senti_labels & senti_labels != neu_idx).type_as(sample_att_weights)
         sample_preds = sample_preds.unsqueeze(1)
         sample_scores = sample_preds * sample_att_weights
         sample_scores = sample_scores.detach().cpu().numpy()
-
-        # greedy_preds, greedy_att_weights = sent_senti_cls(greedy_captions, greedy_lens)
-        # greedy_preds = greedy_preds.softmax(dim=-1)
-        # greedy_preds = greedy_preds.argmax(dim=-1)
-        # greedy_preds = (greedy_preds == senti_labels).type_as(greedy_att_weights)
-        # greedy_preds = greedy_preds.unsqueeze(1)
-        # greedy_scores = greedy_preds * greedy_att_weights
-        # greedy_scores = greedy_scores.detach().cpu().numpy()
     sent_senti_cls.train(training)
 
     max_len = sample_captions.shape[1]
-    sample_scores = np.pad(sample_scores, ((0, 0), (0, max_len-sample_scores.shape[1])))
-    # greedy_scores = greedy_scores[:, :max_len]
-    # greedy_scores = np.pad(greedy_scores, ((0, 0), (0, max_len - greedy_scores.shape[1])))
-
-    # rewards = sample_scores - greedy_scores
-    # rewards = sample_scores - sample_scores.mean(-1).reshape(sample_scores.shape[0], 1)
-    rewards = sample_scores
+    rewards = np.pad(sample_scores, ((0, 0), (0, max_len-sample_scores.shape[1])))
+    # rewards = rewards - (rewards.sum(-1, keepdims=True) / sample_masks.cpu().numpy().sum(-1, keepdims=True))
     return rewards
 
 
