@@ -16,7 +16,7 @@ def compute_ppl(captions_file_prefix):
     if 'full' in captions_file_prefix:
         corpus_type = 'full'
     train_mode = 'rl'
-    if 'xe' in captions_file_prefix:
+    if '/xe/' in captions_file_prefix:
         train_mode = 'xe'
 
     lm_cmds = {}

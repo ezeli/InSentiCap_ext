@@ -24,8 +24,8 @@ class Detector():
         _, self.cap_xe_crit, self.cap_da_crit = self.captioner.get_optim_criterion(0)
         self.cap_rl_crit = RewardCriterion()
 
-        self.cls_flag = 1.0
-        self.seq_flag = 1.0
+        self.cls_flag = 5.0
+        self.seq_flag = 5.0
 
     def set_ciderd_scorer(self, captions):
         self.ciderd_scorer = get_ciderd_scorer(captions, self.captioner.sos_id, self.captioner.eos_id)
@@ -41,7 +41,7 @@ class Detector():
         if training:
             seq2seq_data = iter(data[1])
         caption_data = iter(data[0])
-        for _ in tqdm.tqdm(range(min(500000, len(data[0]))), ncols=100):
+        for _ in tqdm.tqdm(range(min(500, len(data[0]))), ncols=100):
             fns, vis_sentis, region_feats, spatial_feats, (caps_tensor, lengths), xe_senti_labels, cpts_tensor, sentis_tensor, ground_truth = next(caption_data)
             vis_sentis = vis_sentis.to(device)
             region_feats = region_feats.to(device)

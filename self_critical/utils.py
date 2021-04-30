@@ -107,8 +107,8 @@ def get_cls_reward(sample_captions, sample_masks, senti_labels, sent_senti_cls, 
     with torch.no_grad():
         sample_preds, sample_att_weights = sent_senti_cls(sample_captions, sample_lens)
         sample_preds = sample_preds.argmax(dim=-1)
-        sample_preds = (sample_preds == senti_labels).type_as(sample_att_weights)
-        # sample_preds = (sample_preds == senti_labels & senti_labels != neu_idx).type_as(sample_att_weights)
+        # sample_preds = (sample_preds == senti_labels).type_as(sample_att_weights)
+        sample_preds = ((sample_preds == senti_labels) & (senti_labels != neu_idx)).type_as(sample_att_weights)
         sample_preds = sample_preds.unsqueeze(1)
         sample_scores = sample_preds * sample_att_weights
         sample_scores = sample_scores.detach().cpu().numpy()

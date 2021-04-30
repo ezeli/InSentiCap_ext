@@ -30,7 +30,7 @@ def parse_opt():
     parser.add_argument('--xe_bs', type=int, default=20)
     parser.add_argument('--xe_resume', type=str, default='')
     parser.add_argument('--xe_epochs', type=int, default=40)
-    parser.add_argument('--xe_num_works', type=int, default=0)
+    parser.add_argument('--xe_num_works', type=int, default=2)
 
     parser.add_argument('--scheduled_sampling_start', type=int, default=0)
     parser.add_argument('--scheduled_sampling_increase_every', type=int, default=4)
@@ -40,7 +40,7 @@ def parse_opt():
     # rl
     parser.add_argument('--rl_lr', type=float, default=4e-5)
     parser.add_argument('--rl_bs', type=int, default=20)
-    parser.add_argument('--rl_num_works', type=int, default=0)
+    parser.add_argument('--rl_num_works', type=int, default=2)
     parser.add_argument('--rl_resume', type=str, default='')
     parser.add_argument('--rl_senti_resume', type=str, default='checkpoint/sentiment/model-10.pth')
     parser.add_argument('--rl_epochs', type=int, default=10)

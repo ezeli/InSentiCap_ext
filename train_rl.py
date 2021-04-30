@@ -164,22 +164,22 @@ def train():
     train_data = get_caption_dataloader(region_feats, spatial_feats, img_captions['train'], vis_sentiments,
                                         img_det_concepts, img_det_sentiments, idx2word.index('<PAD>'),
                                         opt.max_seq_len, opt.num_concepts, opt.num_sentiments,
-                                        opt.xe_bs, opt.xe_num_works, mode='rl')
+                                        opt.rl_bs, opt.rl_num_works, mode='rl')
     val_data = get_caption_dataloader(region_feats, spatial_feats, img_captions['val'], vis_sentiments,
                                       img_det_concepts, img_det_sentiments, idx2word.index('<PAD>'),
-                                      opt.max_seq_len, opt.num_concepts, opt.num_sentiments, opt.xe_bs,
-                                      opt.xe_num_works, shuffle=False, mode='rl')
+                                      opt.max_seq_len, opt.num_concepts, opt.num_sentiments, opt.rl_bs,
+                                      opt.rl_num_works, shuffle=False, mode='rl')
     scs_data = get_senti_corpus_with_sentis_dataloader(
         senti_captions, idx2word.index('<PAD>'), opt.max_seq_len,
-        opt.num_concepts, opt.num_sentiments, opt.rl_bs, opt.xe_num_works)
+        opt.num_concepts, opt.num_sentiments, opt.rl_bs, opt.rl_num_works)
 
     test_captions = {}
     for fn in img_captions['test']:
         test_captions[fn] = [[[], -1]]
     test_data = get_caption_dataloader(region_feats, spatial_feats, test_captions, vis_sentiments,
                                        img_det_concepts, img_det_sentiments, idx2word.index('<PAD>'),
-                                       opt.max_seq_len, opt.num_concepts, opt.num_sentiments, opt.xe_bs,
-                                       opt.xe_num_works, shuffle=False, mode='rl')
+                                       opt.max_seq_len, opt.num_concepts, opt.num_sentiments, opt.rl_bs,
+                                       opt.rl_num_works, shuffle=False, mode='rl')
     # lms = {}
     # lm_dir = os.path.join(opt.captions_dir, dataset_name, corpus_type, 'lm')
     # for senti, i in senti_label2idx.items():
@@ -188,10 +188,10 @@ def train():
     model = Detector(captioner, optimizer, sent_senti_cls)
     model.set_ciderd_scorer(img_captions)
 
-    tmp_dir = '10cls_all'
-    checkpoint = os.path.join(opt.checkpoint, 'rl', dataset_name, corpus_type, tmp_dir)
+    tmp_dir = '50cls_50seq_500'
+    '''checkpoint = os.path.join(opt.checkpoint, 'rl', dataset_name, corpus_type, tmp_dir)
     if not os.path.exists(checkpoint):
-        os.makedirs(checkpoint)
+        os.makedirs(checkpoint)'''
     result_dir = os.path.join(opt.result_dir, 'rl', dataset_name, corpus_type, tmp_dir)
     if not os.path.exists(result_dir):
         os.makedirs(result_dir)
@@ -244,7 +244,7 @@ def train():
                 with open(os.path.join(result_dir, 'result_%d_%s_w.txt' % (epoch, senti)), 'w') as f:
                     f.write(sents_w[senti])
 
-        if epoch > -1:
+        if epoch < -1:
             chkpoint = {
                 'epoch': epoch,
                 'model': captioner.state_dict(),
