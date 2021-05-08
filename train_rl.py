@@ -60,7 +60,7 @@ def train():
         print("====> loaded checkpoint '{}', epoch: {}"
               .format(opt.rl_resume, chkpoint['epoch']))
     else:
-        rl_xe_resume = os.path.join(opt.checkpoint, 'xe', dataset_name, corpus_type, 'model-best.pth')
+        rl_xe_resume = os.path.join(opt.checkpoint, 'xe', dataset_name, corpus_type, 'att_and_mean_fuse/model-best.pth')
         print("====> loading checkpoint '{}'".format(rl_xe_resume))
         chkpoint = torch.load(rl_xe_resume, map_location=lambda s, l: s)
         assert opt.settings == chkpoint['settings'], \
@@ -188,10 +188,10 @@ def train():
     model = Detector(captioner, optimizer, sent_senti_cls)
     model.set_ciderd_scorer(img_captions)
 
-    tmp_dir = '50cls_50seq_500'
-    '''checkpoint = os.path.join(opt.checkpoint, 'rl', dataset_name, corpus_type, tmp_dir)
-    if not os.path.exists(checkpoint):
-        os.makedirs(checkpoint)'''
+    tmp_dir = 'att_and_mean_fuse/vsxe_05cls_10seq_10xe_1000_zf'
+    checkpoint = os.path.join(opt.checkpoint, 'rl', dataset_name, corpus_type, tmp_dir)
+    # if not os.path.exists(checkpoint):
+    #     os.makedirs(checkpoint)
     result_dir = os.path.join(opt.result_dir, 'rl', dataset_name, corpus_type, tmp_dir)
     if not os.path.exists(result_dir):
         os.makedirs(result_dir)

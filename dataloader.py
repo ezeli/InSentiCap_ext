@@ -14,7 +14,11 @@ def create_collate_fn(name, pad_index=0, max_seq_len=17, num_concepts=5,
         for fn, vis_senti, region_feat, spatial_feat, caps_idx, cpts_idx, sentis_idx in dataset:
             ground_truth[fn] = [c[0][:max_seq_len] for c in caps_idx]
             if mode == 'rl':
-                caps_idx = random.sample(caps_idx, 1)
+                tmp_caps_idx = [c for c in caps_idx if c[1] == vis_senti]
+                if tmp_caps_idx:
+                    caps_idx = random.sample(tmp_caps_idx, 1)
+                else:
+                    caps_idx = random.sample(caps_idx, 1)
             for cap, senti in caps_idx:
                 tmp.append([fn, vis_senti, region_feat, spatial_feat, cap, senti, cpts_idx, sentis_idx])
         dataset = tmp

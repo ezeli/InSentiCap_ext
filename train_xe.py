@@ -180,7 +180,7 @@ def train():
             loss_val[k] = v / len(data)
         return loss_val
 
-    tmp_dir = ''
+    tmp_dir = 'att_and_mean_fuse'
     checkpoint = os.path.join(opt.checkpoint, 'xe', dataset_name, corpus_type, tmp_dir)
     if not os.path.exists(checkpoint):
         os.makedirs(checkpoint)

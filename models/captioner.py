@@ -134,10 +134,10 @@ class DecoderLayer(nn.Module):
         return x + self._sublayer(x, sublayer, n)  # x + self.drop(sublayer(self.layer_norms[n](x)))
 
     def _fuse_gate(self, x, att_feats):
-        # scores = att_feats.matmul(x.unsqueeze(-1))  # [bs, seq_len, 2 or 4, 1]
-        # scores = scores.transpose(2, 3).softmax(-1)  # [bs, seq_len, 1, 2 or 4]
-        # att_feats = scores.matmul(att_feats).squeeze(2)  # [bs, seq_len, d_model]
-        att_feats = att_feats.mean(2)
+        scores = att_feats.matmul(x.unsqueeze(-1))  # [bs, seq_len, 2 or 4, 1]
+        scores = scores.transpose(2, 3).softmax(-1)  # [bs, seq_len, 1, 2 or 4]
+        att_feats = scores.matmul(att_feats).squeeze(2)  # [bs, seq_len, d_model]
+        # att_feats = att_feats.mean(2)
         return x + att_feats
 
     def forward(self, captions, seq_masks, cpt_words, senti_words, region_feats, spatial_feats):
@@ -145,13 +145,16 @@ class DecoderLayer(nn.Module):
 
         cpt_words = self._sublayer(captions, lambda x: self.sem_con_att(x, cpt_words, cpt_words), 1)
         senti_words = self._sublayer(captions, lambda x: self.sem_sen_att(x, senti_words, senti_words), 2)
+        sem_feats = torch.stack([cpt_words, senti_words], dim=2)  # [bs, seq_len, 2, d_model]
+        sem_feats = self._fuse_gate(captions, sem_feats)
         if region_feats is not None:
             region_feats = self._sublayer(captions, lambda x: self.vis_con_att(x, region_feats, region_feats), 3)
             spatial_feats = self._sublayer(captions, lambda x: self.vis_sen_att(x, spatial_feats, spatial_feats), 4)
-            att_feats = torch.stack([cpt_words, senti_words, region_feats, spatial_feats], dim=2)  # [bs, seq_len, 4, d_model]
+            vis_feats = torch.stack([region_feats, spatial_feats], dim=2)  # [bs, seq_len, 4, d_model]
+            vis_feats = self._fuse_gate(captions, vis_feats)
+            fuse_feats = (sem_feats + vis_feats) / 2
         else:
-            att_feats = torch.stack([cpt_words, senti_words], dim=2)  # [bs, seq_len, 2, d_model]
-        fuse_feats = self._fuse_gate(captions, att_feats)
+            fuse_feats = sem_feats
 
         return self._add_res_connection(fuse_feats, self.feed_forward, -1)
 
