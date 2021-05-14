@@ -101,23 +101,23 @@ def get_lm_reward(sample_captions, greedy_captions, senti_labels, sos_token, eos
 
 
 def get_cls_reward(sample_captions, sample_masks, senti_labels, sent_senti_cls, neu_idx):
-    training = sent_senti_cls.training
     sample_lens = list(sample_masks.sum(dim=-1).type(torch.int).cpu().numpy())
-    sent_senti_cls.eval()
     with torch.no_grad():
         sample_preds, sample_att_weights = sent_senti_cls(sample_captions, sample_lens)
         sample_preds = sample_preds.argmax(dim=-1)
         sample_preds = (sample_preds == senti_labels).type_as(sample_att_weights)
         sample_preds[sample_preds == 0] = -1
         # sample_preds = ((sample_preds == senti_labels) & (senti_labels != neu_idx)).type_as(sample_att_weights)
-        sample_preds = sample_preds.unsqueeze(1)
+        '''sample_preds = sample_preds.unsqueeze(1)
         sample_scores = sample_preds * sample_att_weights
         sample_scores = sample_scores.detach().cpu().numpy()
-    sent_senti_cls.train(training)
 
     max_len = sample_captions.shape[1]
     rewards = np.pad(sample_scores, ((0, 0), (0, max_len-sample_scores.shape[1])))
-    # rewards = rewards - (rewards.sum(-1, keepdims=True) / sample_masks.cpu().numpy().sum(-1, keepdims=True))
+    rewards = rewards - (rewards.sum(-1, keepdims=True) / sample_masks.cpu().numpy().sum(-1, keepdims=True))'''
+
+    scores = sample_preds.detach().cpu().numpy()
+    rewards = np.repeat(scores[:, np.newaxis], sample_captions.shape[1], 1)
     return rewards
 
 

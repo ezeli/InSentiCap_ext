@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import tqdm
+import numpy as np
 from collections import defaultdict
 
 from self_critical.utils import get_ciderd_scorer, get_self_critical_reward, \
@@ -24,9 +25,9 @@ class Detector():
         _, self.cap_xe_crit, self.cap_da_crit = self.captioner.get_optim_criterion(0)
         self.cap_rl_crit = RewardCriterion()
 
-        self.cls_flag = 0.5
-        self.seq_flag = 1.0
-        self.xe_flag = 1.0
+        self.cls_flag = 2.0
+        self.seq_flag = 0.05
+        self.xe_flag = 0.05
 
     def set_ciderd_scorer(self, captions):
         self.ciderd_scorer = get_ciderd_scorer(captions, self.captioner.sos_id, self.captioner.eos_id)
@@ -42,7 +43,7 @@ class Detector():
         if training:
             seq2seq_data = iter(data[1])
         caption_data = iter(data[0])
-        for _ in tqdm.tqdm(range(min(1000, len(data[0]))), ncols=100):
+        for _ in tqdm.tqdm(range(min(500, len(data[0]))), ncols=100):
             fns, vis_sentis, region_feats, spatial_feats, (caps_tensor, lengths), xe_senti_labels, cpts_tensor, sentis_tensor, ground_truth = next(caption_data)
             vis_sentis = vis_sentis.to(device)
             region_feats = region_feats.to(device)
@@ -84,9 +85,13 @@ class Detector():
             cap_loss = self.cap_rl_crit(sample_logprobs, seq_masks, rewards)
             all_losses['cap_loss'] += float(cap_loss)
 
-            pred = self.captioner(region_feats, spatial_feats, xe_senti_labels, cpts_tensor, sentis_tensor,
-                                  caps_tensor, lengths, mode='xe')
-            xe_loss = self.xe_flag * self.cap_xe_crit(pred[vis_sentis == xe_senti_labels], caps_tensor[vis_sentis == xe_senti_labels][:, 1:], lengths)
+            # xe_loss = 0.0
+            # xe_idx = (vis_sentis == xe_senti_labels).cpu().numpy()
+            # if sum(xe_idx) > 0:
+            pred = self.captioner(region_feats, spatial_feats, xe_senti_labels,
+                                  cpts_tensor, sentis_tensor, caps_tensor, lengths, mode='xe')
+            # xe_loss = self.xe_flag * self.cap_xe_crit(pred[xe_idx], caps_tensor[xe_idx][:, 1:], np.array(lengths)[xe_idx])
+            xe_loss = self.xe_flag * self.cap_xe_crit(pred, caps_tensor[:, 1:], lengths)
             all_losses['xe_loss'] += float(xe_loss)
 
             seq2seq_loss = 0.0

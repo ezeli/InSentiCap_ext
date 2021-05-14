@@ -10,6 +10,10 @@ from dataloader import get_senti_sents_dataloader
 device = torch.device('cuda:0')
 max_seq_len = 16
 
+result_dir = './result/eval_cls'
+if not os.path.exists(result_dir):
+    os.makedirs(result_dir)
+
 
 def compute_cls(captions_file_prefix):
     dataset_name = 'coco'
@@ -55,17 +59,35 @@ def compute_cls(captions_file_prefix):
     for senti, val_data in val_datas.items():
         all_num = 0
         wrong_num = 0
+        cor_res = ''
+        wro_res = ''
         with torch.no_grad():
             for sentis, (caps_tensor, lengths) in tqdm.tqdm(val_data, ncols=100):
                 sentis = sentis.to(device)
                 caps_tensor = caps_tensor.to(device)
 
-                rest, _, _ = model.sample(caps_tensor, lengths)
+                rest, _, scores, att_weights = model.sample(caps_tensor, lengths)
                 rest = torch.LongTensor(np.array(rest)).to(device)
                 all_num += int(sentis.size(0))
                 wrong_num += int((sentis != rest).sum())
+
+                for cap_idx, cap_len, senti_idx, rest_idx, score, att_weight in zip(caps_tensor, lengths, sentis, rest, scores, att_weights):
+                    cap = ' '.join([idx2word[idx] for idx in cap_idx[:cap_len]])
+                    real_senti = sentiment_categories[int(senti_idx)]
+                    pred_senti = sentiment_categories[int(rest_idx)]
+                    att_weight = att_weight.detach().cpu().numpy().tolist()
+                    att_weight = ' '.join(['%.3f' % w for w in att_weight])
+                    cap = '  |  '.join([cap, real_senti, pred_senti, '%.4f' % score, att_weight]) + '\n'
+                    if real_senti == pred_senti:
+                        cor_res += cap
+                    else:
+                        wro_res += cap
         wrong_rate = wrong_num / all_num
         print('%s acc_rate: %.6f' % (senti, 1 - wrong_rate))
+        with open(os.path.join(result_dir, senti+'_cor.txt'), 'w') as f:
+            f.write(cor_res)
+        with open(os.path.join(result_dir, senti+'_wro.txt'), 'w') as f:
+            f.write(wro_res)
 
 
 if __name__ == "__main__":

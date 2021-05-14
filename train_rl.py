@@ -188,7 +188,7 @@ def train():
     model = Detector(captioner, optimizer, sent_senti_cls)
     model.set_ciderd_scorer(img_captions)
 
-    tmp_dir = 'att_and_mean_fuse/vsxe_05cls_10seq_10xe_1000_zf'
+    tmp_dir = 'zfyi/20cls_005xe_005seq_500'
     checkpoint = os.path.join(opt.checkpoint, 'rl', dataset_name, corpus_type, tmp_dir)
     # if not os.path.exists(checkpoint):
     #     os.makedirs(checkpoint)

@@ -7,6 +7,7 @@ class SentenceSentimentClassifier(nn.Module):
     def __init__(self, idx2word, sentiment_categories, settings):
         super(SentenceSentimentClassifier, self).__init__()
         self.sentiment_categories = sentiment_categories
+        self.neu_id = sentiment_categories.index('neutral')
         self.pad_id = idx2word.index('<PAD>')
         self.vocab_size = len(idx2word)
         self.word_embed = nn.Sequential(nn.Embedding(self.vocab_size, settings['word_emb_dim'],
@@ -58,14 +59,18 @@ class SentenceSentimentClassifier(nn.Module):
     def sample(self, seqs, lengths):
         self.eval()
         pred, att_weights = self.forward(seqs, lengths)
+        pred = pred.softmax(-1)
         result = []
         result_w = []
+        scores = []
         for p in pred:
             res = int(p.argmax(-1))
+            score = float(p[res])
             result.append(res)
             result_w.append(self.sentiment_categories[res])
+            scores.append(score)
 
-        return result, result_w, att_weights
+        return result, result_w, scores, att_weights
 
     def get_optim_and_crit(self, lr, weight_decay=0):
         return torch.optim.Adam(self.parameters(), lr=lr, weight_decay=weight_decay), \

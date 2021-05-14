@@ -418,6 +418,8 @@ class LabelSmoothingCriterion(nn.Module):
 
     def forward(self, pred, target, lengths):
         max_len = max(lengths)
+        pred = pred[:, :max_len]
+        target = target[:, :max_len]
         mask = pred.new_zeros(len(lengths), max_len)
         for i, l in enumerate(lengths):
             mask[i, :l] = 1

@@ -1,4 +1,5 @@
 import torch
+from torch import nn
 import numpy as np
 import os
 import time
@@ -39,6 +40,7 @@ def train():
     model.to(opt.device)
     lr = 4e-4
     optimizer, criterion = model.get_optim_and_crit(lr)
+    mse_crit = nn.MSELoss()
     if resume:
         print("====> loading checkpoint '{}'".format(resume))
         chkpoint = torch.load(resume, map_location=lambda s, l: s)
@@ -107,7 +109,7 @@ def train():
     if not os.path.exists(result_dir):
         os.makedirs(result_dir)
     previous_acc_rate = None
-    for epoch in range(30):
+    for epoch in range(10):
         print('--------------------epoch: %d' % epoch)
         model.train()
         train_loss = 0.0
@@ -115,8 +117,12 @@ def train():
             sentis = sentis.to(opt.device)
             caps_tensor = caps_tensor.to(opt.device)
 
-            pred, _ = model(caps_tensor, lengths)
+            pred, att_weights = model(caps_tensor, lengths)
             loss = criterion(pred, sentis)
+            if epoch > 0:
+                fake_target = (att_weights > 0.5).type_as(att_weights).detach()
+                att_loss = mse_crit(att_weights, fake_target)
+                loss = loss + att_loss
             train_loss += loss.item()
 
             optimizer.zero_grad()
@@ -137,7 +143,7 @@ def train():
                     sentis = sentis.to(opt.device)
                     caps_tensor = caps_tensor.to(opt.device)
 
-                    rest, rest_w, att_weights = model.sample(caps_tensor, lengths)
+                    rest, rest_w, _, att_weights = model.sample(caps_tensor, lengths)
                     rest = torch.LongTensor(np.array(rest)).to(opt.device)
                     total_num = int(sentis.size(0))
                     wrong_num = int((sentis != rest).sum())

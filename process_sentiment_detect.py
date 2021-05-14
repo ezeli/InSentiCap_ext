@@ -79,7 +79,7 @@ def process_caption_senti():
                 end = lengths[i]
                 caps_tensor[i, :end] = torch.LongTensor(c[:end])
             caps_tensor = caps_tensor.to(device)
-            _, rest_w, _ = sent_senti_cls.sample(caps_tensor, lengths)
+            _, rest_w, _, _ = sent_senti_cls.sample(caps_tensor, lengths)
             for cap, senti in zip(caps, rest_w):
                 img_captions_senti[split][fn].append([cap, senti])
     json.dump(img_captions_senti, open(os.path.join('./data/captions', dataset_name, corpus_type, 'img_captions_senti.json'), 'w'))
