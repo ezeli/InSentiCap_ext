@@ -4,6 +4,7 @@ from torch.utils import data
 import numpy as np
 import h5py
 import random
+import pickle
 
 
 def create_collate_fn(name, pad_index=0, max_seq_len=17, num_concepts=5,
@@ -251,4 +252,54 @@ def get_senti_sents_dataloader(senti_sentences, pad_index, max_seq_len,
                                  collate_fn=create_collate_fn(
                                      'senti_sents', pad_index=pad_index,
                                      max_seq_len=max_seq_len))
+    return dataloader
+
+
+def video_create_collate_fn(name, pad_index=0, max_seq_len=17, num_concepts=5,
+                            num_sentiments=10, mode='xe'):
+    def concept_collate_fn(dataset):
+        fns, two_d_feats, three_d_feats, audio_feats, cpts = zip(*dataset)
+        two_d_feats = torch.FloatTensor(np.array(two_d_feats))
+        three_d_feats = torch.FloatTensor(np.array(three_d_feats))
+        audio_feats = torch.FloatTensor(np.array(audio_feats))
+        cpts_tensors = torch.LongTensor(np.array(cpts))
+        return fns, two_d_feats, three_d_feats, audio_feats, cpts_tensors
+
+    if name == 'concept':
+        return concept_collate_fn
+
+
+class VideoConceptDataset(data.Dataset):
+    def __init__(self, two_d_feature_file, three_d_feature_file, audio_feature_file,
+                 concepts, num_cpts):
+        self.two_d_feature_file = two_d_feature_file
+        self.three_d_feature_file = three_d_feature_file
+        self.audio_feats = pickle.load(open(audio_feature_file, 'rb'))
+        self.concepts = list(concepts.items())
+        self.num_cpts = num_cpts
+
+    def __getitem__(self, index):
+        fn, cpts_idx = self.concepts[index]
+        two_d_feats = h5py.File(self.two_d_feature_file, 'r')
+        three_d_feats = h5py.File(self.three_d_feature_file, 'r')
+        two_d_feats = two_d_feats[fn][:].mean(0)
+        three_d_feats = three_d_feats[fn][:].mean(0)
+        audio_feats = np.array(self.audio_feats[fn]).mean(0)
+        cpts = np.zeros(self.num_cpts, dtype=np.int16)
+        cpts[cpts_idx] = 1
+        return fn, np.array(two_d_feats), np.array(three_d_feats), audio_feats, cpts
+
+    def __len__(self):
+        return len(self.concepts)
+
+
+def get_video_concept_dataloader(two_d_feature_file, three_d_feature_file, audio_feature_file,
+                                 concepts, num_cpts, batch_size, num_workers=0, shuffle=True):
+    dataset = VideoConceptDataset(two_d_feature_file, three_d_feature_file, audio_feature_file,
+                                  concepts, num_cpts)
+    dataloader = data.DataLoader(dataset,
+                                 batch_size=batch_size,
+                                 shuffle=shuffle,
+                                 num_workers=num_workers,
+                                 collate_fn=video_create_collate_fn('concept'))
     return dataloader

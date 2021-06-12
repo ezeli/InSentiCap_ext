@@ -11,8 +11,8 @@ from bdb import BdbQuit
 import torch
 
 from opts import parse_opt
-from models.concept_detector import ConceptDetector
-from dataloader import get_concept_dataloader
+from models.video_concept_detector import VideoConceptDetector
+from dataloader import get_video_concept_dataloader
 
 
 def clip_gradient(optimizer, grad_clip):
@@ -25,9 +25,9 @@ def train():
     dataset_name = opt.dataset_name
 
     idx2concept = json.load(open(os.path.join(opt.captions_dir, dataset_name, 'idx2concept.json'), 'r'))
-    img_concepts = json.load(open(os.path.join(opt.captions_dir, dataset_name, 'img_concepts.json'), 'r'))
+    video_concepts = json.load(open(os.path.join(opt.captions_dir, dataset_name, 'video_concepts.json'), 'r'))
 
-    cpt_detector = ConceptDetector(idx2concept, opt.settings)
+    cpt_detector = VideoConceptDetector(idx2concept, opt.settings)
     cpt_detector.to(opt.device)
     lr = opt.concept_lr
     optimizer, criterion = cpt_detector.get_optim_criterion(lr)
@@ -51,37 +51,44 @@ def train():
         concept2idx[w] = i
 
     ground_truth = {}
-    print('====> process image concepts begin')
-    img_concepts_id = {}
-    for split, concepts in img_concepts.items():
+    print('====> process video concepts begin')
+    video_concepts_id = {}
+    for split, concepts in video_concepts.items():
         print('convert %s concepts to index' % split)
-        img_concepts_id[split] = {}
+        video_concepts_id[split] = {}
         for fn, cpts in tqdm.tqdm(concepts.items(), ncols=100):
             if split == 'test':
                 ground_truth[fn] = [c for c in cpts if c in concept2idx]
             cpts = [concept2idx[c] for c in cpts if c in concept2idx]
-            img_concepts_id[split][fn] = cpts
-    img_concepts = img_concepts_id
-    print('====> process image concepts end')
+            video_concepts_id[split][fn] = cpts
+    video_concepts = video_concepts_id
+    print('====> process video concepts end')
 
-    f_fc = os.path.join(opt.feats_dir, dataset_name, '%s_fc.h5' % dataset_name)
-    train_data = get_concept_dataloader(
-        f_fc, img_concepts['train'], len(idx2concept),
+    two_d_feature_file = os.path.join(opt.feats_dir, dataset_name, '%s_ResNet101.h5' % dataset_name)
+    three_d_feature_file = os.path.join(opt.feats_dir, dataset_name, '%s_3DResNext101.h5' % dataset_name)
+    audio_feature_file = os.path.join(opt.feats_dir, dataset_name, '%s_audio_VGGish.pickle' % dataset_name)
+    train_data = get_video_concept_dataloader(
+        two_d_feature_file, three_d_feature_file, audio_feature_file,
+        video_concepts['train'], len(idx2concept),
         opt.concept_bs, opt.concept_num_works)
-    val_data = get_concept_dataloader(
-        f_fc, img_concepts['val'], len(idx2concept),
+    val_data = get_video_concept_dataloader(
+        two_d_feature_file, three_d_feature_file, audio_feature_file,
+        video_concepts['val'], len(idx2concept),
         opt.concept_bs, opt.concept_num_works, shuffle=False)
-    test_data = get_concept_dataloader(
-        f_fc, img_concepts['test'], len(idx2concept),
+    test_data = get_video_concept_dataloader(
+        two_d_feature_file, three_d_feature_file, audio_feature_file,
+        video_concepts['test'], len(idx2concept),
         opt.concept_bs, opt.concept_num_works, shuffle=False)
 
     def forward(data, training=True):
         cpt_detector.train(training)
         loss_val = 0.0
-        for _, fc_feats, cpts_tensors in tqdm.tqdm(data, ncols=100):
-            fc_feats = fc_feats.to(opt.device)
+        for _, two_d_feats, three_d_feats, audio_feats, cpts_tensors in tqdm.tqdm(data, ncols=100):
+            two_d_feats = two_d_feats.to(opt.device)
+            three_d_feats = three_d_feats.to(opt.device)
+            audio_feats = audio_feats.to(opt.device)
             cpts_tensors = cpts_tensors.to(opt.device)
-            pred = cpt_detector(fc_feats)
+            pred = cpt_detector(two_d_feats, three_d_feats, audio_feats)
             loss = criterion(pred, cpts_tensors)
             loss_val += loss.item()
             if training:
@@ -106,10 +113,12 @@ def train():
             pre = 0.0
             recall = 0.0
             last_score = 0.0
-            for fns, fc_feats, cpts_tensors in tqdm.tqdm(test_data, ncols=100):
-                fc_feats = fc_feats.to(opt.device)
+            for fns, two_d_feats, three_d_feats, audio_feats, cpts_tensors in tqdm.tqdm(test_data, ncols=100):
+                two_d_feats = two_d_feats.to(opt.device)
+                three_d_feats = three_d_feats.to(opt.device)
+                audio_feats = audio_feats.to(opt.device)
                 cpts_tensors = cpts_tensors.to(opt.device)
-                pred, concepts, scores = cpt_detector.sample(fc_feats, num=opt.num_concepts)
+                pred, concepts, scores = cpt_detector.sample(two_d_feats, three_d_feats, audio_feats, num=opt.num_concepts)
                 loss = criterion(pred, cpts_tensors)
                 test_loss += loss.item()
                 tmp_pre = 0.0

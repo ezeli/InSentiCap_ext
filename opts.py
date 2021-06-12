@@ -8,11 +8,11 @@ def parse_opt():
 
     # train settings
     # train concept detector
-    parser.add_argument('--concept_lr', type=float, default=4e-4)
+    parser.add_argument('--concept_lr', type=float, default=4e-5)  # 4e-5 for video, 4e-4 for image
     parser.add_argument('--concept_bs', type=int, default=80)
     parser.add_argument('--concept_resume', type=str, default='')
-    parser.add_argument('--concept_epochs', type=int, default=40)
-    parser.add_argument('--concept_num_works', type=int, default=0)
+    parser.add_argument('--concept_epochs', type=int, default=400)
+    parser.add_argument('--concept_num_works', type=int, default=2)
 
     # train sentiment detector
     parser.add_argument('--senti_lr', type=float, default=4e-4)
@@ -46,7 +46,7 @@ def parse_opt():
     parser.add_argument('--rl_epochs', type=int, default=40)
 
     # common
-    parser.add_argument('--dataset_name', type=str, default='coco', choices=['coco', 'flickr30k'])
+    parser.add_argument('--dataset_name', type=str, default='msrvtt', choices=['coco', 'flickr30k', 'msrvtt'])
     parser.add_argument('--corpus_type', type=str, default='part', choices=['part', 'full'])
     parser.add_argument('--captions_dir', type=str, default='./data/captions')
     parser.add_argument('--feats_dir', type=str, default='./data/features')
@@ -77,6 +77,7 @@ def parse_opt():
     settings = dict()
     settings['att_feat_dim'] = 2048
     settings['fc_feat_dim'] = 2048
+    settings['audio_feat_dim'] = 128
     settings['d_model'] = 512  # model dim
     settings['d_ff'] = 2048  # feed forward dim
     settings['h'] = 8  # multi heads num
