@@ -11,7 +11,7 @@ def parse_opt():
     parser.add_argument('--concept_lr', type=float, default=4e-5)  # 4e-5 for video, 4e-4 for image
     parser.add_argument('--concept_bs', type=int, default=80)
     parser.add_argument('--concept_resume', type=str, default='')
-    parser.add_argument('--concept_epochs', type=int, default=400)
+    parser.add_argument('--concept_epochs', type=int, default=100)
     parser.add_argument('--concept_num_works', type=int, default=2)
 
     # train sentiment detector
