@@ -265,8 +265,18 @@ def video_create_collate_fn(name, pad_index=0, max_seq_len=17, num_concepts=5,
         cpts_tensors = torch.LongTensor(np.array(cpts))
         return fns, two_d_feats, three_d_feats, audio_feats, cpts_tensors
 
+    def senti_video_collate_fn(dataset):
+        fns, two_d_feats, three_d_feats, audio_feats, senti_labels = zip(*dataset)
+        two_d_feats = torch.FloatTensor(np.array(two_d_feats))
+        three_d_feats = torch.FloatTensor(np.array(three_d_feats))
+        audio_feats = torch.FloatTensor(np.array(audio_feats))
+        senti_labels = torch.LongTensor(np.array(senti_labels))
+        return fns, two_d_feats, three_d_feats, audio_feats, senti_labels
+
     if name == 'concept':
         return concept_collate_fn
+    elif name == 'senti_video':
+        return senti_video_collate_fn
 
 
 class VideoConceptDataset(data.Dataset):
@@ -302,4 +312,36 @@ def get_video_concept_dataloader(two_d_feature_file, three_d_feature_file, audio
                                  shuffle=shuffle,
                                  num_workers=num_workers,
                                  collate_fn=video_create_collate_fn('concept'))
+    return dataloader
+
+
+class SentiVideoDataset(data.Dataset):
+    def __init__(self, two_d_feature_file, three_d_feature_file, audio_feature_file, vid_senti_labels):
+        self.two_d_feature_file = two_d_feature_file
+        self.three_d_feature_file = three_d_feature_file
+        self.audio_feats = pickle.load(open(audio_feature_file, 'rb'))
+        self.vid_senti_labels = vid_senti_labels  # [(fn, senti_label),...]
+
+    def __getitem__(self, index):
+        fn, senti_label = self.vid_senti_labels[index]
+        two_d_feats = h5py.File(self.two_d_feature_file, 'r')
+        three_d_feats = h5py.File(self.three_d_feature_file, 'r')
+        two_d_feats = two_d_feats[fn][:].mean(0)
+        three_d_feats = three_d_feats[fn][:].mean(0)
+        audio_feats = np.array(self.audio_feats[fn]).mean(0)
+        return fn, np.array(two_d_feats), np.array(three_d_feats), audio_feats, senti_label
+
+    def __len__(self):
+        return len(self.vid_senti_labels)
+
+
+def get_senti_video_dataloader(two_d_feature_file, three_d_feature_file, audio_feature_file,
+                               vid_senti_labels, batch_size, num_workers=0, shuffle=True):
+    dataset = SentiVideoDataset(two_d_feature_file, three_d_feature_file, audio_feature_file,
+                                vid_senti_labels)
+    dataloader = data.DataLoader(dataset,
+                                 batch_size=batch_size,
+                                 shuffle=shuffle,
+                                 num_workers=num_workers,
+                                 collate_fn=video_create_collate_fn('senti_video'))
     return dataloader

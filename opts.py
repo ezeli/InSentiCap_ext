@@ -22,6 +22,7 @@ def parse_opt():
     parser.add_argument('--senti_num_works', type=int, default=0)
 
     parser.add_argument('--img_senti_labels', type=str, default='./data/captions/img_senti_labels.json')
+    parser.add_argument('--vid_senti_labels', type=str, default='./data/captions/vid_senti_labels.json')
     parser.add_argument('--sentiment_categories', type=list, default=['positive', 'negative', 'neutral'])
 
     # train full model
