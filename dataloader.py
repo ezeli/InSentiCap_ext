@@ -256,7 +256,7 @@ def get_senti_sents_dataloader(senti_sentences, pad_index, max_seq_len,
 
 
 def video_create_collate_fn(name, pad_index=0, max_seq_len=17, num_concepts=5,
-                            num_sentiments=10, mode='xe'):
+                            num_sentiments=10, max_feat_len=10, mode='xe'):
     def concept_collate_fn(dataset):
         fns, two_d_feats, three_d_feats, audio_feats, cpts = zip(*dataset)
         two_d_feats = torch.FloatTensor(np.array(two_d_feats))
@@ -267,11 +267,32 @@ def video_create_collate_fn(name, pad_index=0, max_seq_len=17, num_concepts=5,
 
     def senti_video_collate_fn(dataset):
         fns, two_d_feats, three_d_feats, audio_feats, senti_labels = zip(*dataset)
-        two_d_feats = torch.FloatTensor(np.array(two_d_feats))
-        three_d_feats = torch.FloatTensor(np.array(three_d_feats))
-        audio_feats = torch.FloatTensor(np.array(audio_feats))
         senti_labels = torch.LongTensor(np.array(senti_labels))
-        return fns, two_d_feats, three_d_feats, audio_feats, senti_labels
+
+        two_d_feats_lengths = [min(c.shape[0], max_feat_len) for c in two_d_feats]
+        two_d_feats_tensor = torch.FloatTensor(len(two_d_feats), max(two_d_feats_lengths),
+                                               two_d_feats[0].shape[1]).fill_(0)
+        for i, c in enumerate(two_d_feats):
+            end_idx = two_d_feats_lengths[i]
+            feat_idxs = np.linspace(0, c.shape[0], num=end_idx, endpoint=False, dtype=np.int)
+            two_d_feats_tensor[i, :end_idx] = torch.FloatTensor(c[feat_idxs])
+
+        three_d_feats_lengths = [min(c.shape[0], max_feat_len) for c in three_d_feats]
+        three_d_feats_tensor = torch.FloatTensor(len(three_d_feats), max(three_d_feats_lengths),
+                                                 three_d_feats[0].shape[1]).fill_(0)
+        for i, c in enumerate(three_d_feats):
+            end_idx = three_d_feats_lengths[i]
+            feat_idxs = np.linspace(0, c.shape[0], num=end_idx, endpoint=False, dtype=np.int)
+            three_d_feats_tensor[i, :end_idx] = torch.FloatTensor(c[feat_idxs])
+
+        audio_feats_lengths = [min(c.shape[0], max_feat_len) for c in audio_feats]
+        audio_feats_tensor = torch.FloatTensor(len(audio_feats), max(audio_feats_lengths),
+                                               audio_feats[0].shape[1]).fill_(0)
+        for i, c in enumerate(audio_feats):
+            end_idx = audio_feats_lengths[i]
+            feat_idxs = np.linspace(0, c.shape[0], num=end_idx, endpoint=False, dtype=np.int)
+            audio_feats_tensor[i, :end_idx] = torch.FloatTensor(c[feat_idxs])
+        return fns, (two_d_feats_tensor, two_d_feats_lengths), (three_d_feats_tensor, three_d_feats_lengths), (audio_feats_tensor, audio_feats_lengths), senti_labels
 
     if name == 'concept':
         return concept_collate_fn
@@ -326,9 +347,9 @@ class SentiVideoDataset(data.Dataset):
         fn, senti_label = self.vid_senti_labels[index]
         two_d_feats = h5py.File(self.two_d_feature_file, 'r')
         three_d_feats = h5py.File(self.three_d_feature_file, 'r')
-        two_d_feats = two_d_feats[fn][:].mean(0)
-        three_d_feats = three_d_feats[fn][:].mean(0)
-        audio_feats = np.array(self.audio_feats[fn]).mean(0)
+        two_d_feats = two_d_feats[fn][:]
+        three_d_feats = three_d_feats[fn][:]
+        audio_feats = np.array(self.audio_feats[fn])
         return fn, np.array(two_d_feats), np.array(three_d_feats), audio_feats, senti_label
 
     def __len__(self):

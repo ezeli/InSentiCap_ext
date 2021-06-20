@@ -69,12 +69,14 @@ def train():
     def forward(data, training=True):
         senti_detector.train(training)
         loss_val = 0.0
-        for _, two_d_feats, three_d_feats, audio_feats, senti_labels in tqdm.tqdm(data, ncols=100):
-            two_d_feats = two_d_feats.to(opt.device)
-            three_d_feats = three_d_feats.to(opt.device)
-            audio_feats = audio_feats.to(opt.device)
+        for _, (two_d_feats_tensor, two_d_feats_lengths), (three_d_feats_tensor, three_d_feats_lengths), (audio_feats_tensor, audio_feats_lengths), senti_labels in tqdm.tqdm(data, ncols=100):
+            two_d_feats_tensor = two_d_feats_tensor.to(opt.device)
+            three_d_feats_tensor = three_d_feats_tensor.to(opt.device)
+            audio_feats_tensor = audio_feats_tensor.to(opt.device)
             senti_labels = senti_labels.to(opt.device)
-            pred = senti_detector(two_d_feats, three_d_feats, audio_feats)
+            pred = senti_detector(two_d_feats_tensor, two_d_feats_lengths,
+                                  three_d_feats_tensor, three_d_feats_lengths,
+                                  audio_feats_tensor, audio_feats_lengths)
             loss = criterion(pred, senti_labels)
             loss_val += loss.item()
             if training:
@@ -95,15 +97,16 @@ def train():
             # test
             corr_num = defaultdict(int)
             all_num = defaultdict(int)
-            for fns, two_d_feats, three_d_feats, audio_feats, senti_labels in tqdm.tqdm(test_data, ncols=100):
-                two_d_feats = two_d_feats.to(opt.device)
-                three_d_feats = three_d_feats.to(opt.device)
-                audio_feats = audio_feats.to(opt.device)
+            for fns, (two_d_feats_tensor, two_d_feats_lengths), (three_d_feats_tensor, three_d_feats_lengths), (audio_feats_tensor, audio_feats_lengths), senti_labels in tqdm.tqdm(test_data, ncols=100):
+                two_d_feats_tensor = two_d_feats_tensor.to(opt.device)
+                three_d_feats_tensor = three_d_feats_tensor.to(opt.device)
+                audio_feats_tensor = audio_feats_tensor.to(opt.device)
                 senti_labels = senti_labels.to(opt.device)
-                pred, _, _ = senti_detector.sample(two_d_feats, three_d_feats, audio_feats)
-                for gt_idx, pred_idx in zip(senti_labels, pred):
-                    gt_idx = int(gt_idx)
-                    pred_idx = int(pred_idx)
+                for i, fn in enumerate(fns):
+                    pred, _, _ = senti_detector.sample(two_d_feats_tensor[i, :two_d_feats_lengths[i]],
+                                                       three_d_feats_tensor[i, :three_d_feats_lengths[i]],
+                                                       audio_feats_tensor[i, :audio_feats_lengths[i]])
+                    gt_idx, pred_idx = int(senti_labels[i]), int(pred)
                     all_num[gt_idx] += 1
                     if gt_idx == pred_idx:
                         corr_num[gt_idx] += 1
