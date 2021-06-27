@@ -54,7 +54,11 @@ class VideoSentimentDetector(nn.Module):
             masks = None
         else:
             masks = torch.cat([self._get_masks(lens) for lens in [two_d_feats_lengths, three_d_feats_lengths, audio_feats_lengths]], dim=-1)  # bs*1*seq_len
-        features = self.encoder(features, masks)[:, 0]  # bs*512
+        features = self.encoder(features, masks)  # bs*seq_len*512
+        if masks is not None:
+            features = (features * masks.transpose(1, 2)).sum(dim=1) / masks.sum(dim=-1)
+        else:
+            features = features.mean(dim=1)
         return self.output(features)  # [bz, num]
 
     def sample(self, two_d_feats_tensor, three_d_feats_tensor, audio_feats_tensor):
