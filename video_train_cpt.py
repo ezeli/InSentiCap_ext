@@ -34,8 +34,6 @@ def train():
     if opt.concept_resume:
         print("====> loading checkpoint '{}'".format(opt.concept_resume))
         chkpoint = torch.load(opt.concept_resume, map_location=lambda s, l: s)
-        assert opt.settings == chkpoint['settings'], \
-            'opt.settings and resume model settings are different'
         assert idx2concept == chkpoint['idx2concept'], \
             'idx2concept and resume model idx2concept are different'
         assert dataset_name == chkpoint['dataset_name'], \

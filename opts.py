@@ -78,6 +78,8 @@ def parse_opt():
     settings = dict()
     settings['att_feat_dim'] = 2048
     settings['fc_feat_dim'] = 2048
+    settings['two_d_feat_dim'] = 2048
+    settings['three_d_feat_dim'] = 2048
     settings['audio_feat_dim'] = 128
     settings['d_model'] = 512  # model dim
     settings['d_ff'] = 2048  # feed forward dim
