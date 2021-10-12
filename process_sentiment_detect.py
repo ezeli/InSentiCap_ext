@@ -4,8 +4,10 @@ import os
 import numpy as np
 import json
 import tqdm
+import pickle
 
 from models.sentiment_detector import SentimentDetector
+from models.video_sentiment_detector import VideoSentimentDetector
 from models.sent_senti_cls import SentenceSentimentClassifier
 
 
@@ -41,6 +43,51 @@ def process_img_senti():
         _, _, senti_labels, _ = senti_detector.sample(tmp_feats, senti_threshold)
         for fn, senti in zip(tmp_fns, senti_labels):
             vis_sentiments[fn] = senti
+    json.dump(vis_sentiments, open(os.path.join('./data/captions', dataset_name, 'vis_sentiments.json'), 'w'))
+
+
+def process_vid_senti():
+    senti_detector_file = 'checkpoint/sentiment/video/model-12_0.3088_0.6832_1012-2046.pth'
+    max_feat_len = 10
+
+    print("====> loading senti_detector_file '{}'".format(senti_detector_file))
+    ch = torch.load(senti_detector_file, map_location=lambda s, l: s)
+    sentiment_categories = ch['sentiment_categories']
+    senti_detector = VideoSentimentDetector(sentiment_categories, ch['settings'])
+    senti_detector.load_state_dict(ch['model'])
+    senti_detector.to(device)
+    senti_detector.eval()
+
+    dataset_name = 'msrvtt'
+    two_d_feature_file = os.path.join('./data/features', dataset_name, '%s_ResNet101.h5' % dataset_name)
+    three_d_feature_file = os.path.join('./data/features', dataset_name, '%s_3DResNext101.h5' % dataset_name)
+    audio_feature_file = os.path.join('./data/features', dataset_name, '%s_audio_VGGish.pickle' % dataset_name)
+    audio_feats = pickle.load(open(audio_feature_file, 'rb'))
+
+    vis_sentiments = {}
+    fns = list(audio_feats.keys())
+    for fn in tqdm.tqdm(fns, ncols=100):
+        two_d_feats = h5py.File(two_d_feature_file, 'r')
+        three_d_feats = h5py.File(three_d_feature_file, 'r')
+        audio_feats = pickle.load(open(audio_feature_file, 'rb'))
+        two_d_feats = two_d_feats[fn][:]
+        three_d_feats = three_d_feats[fn][:]
+        audio_feats = np.array(audio_feats[fn])
+
+        end_idx = min(two_d_feats.shape[0], max_feat_len)
+        feat_idxs = np.linspace(0, two_d_feats.shape[0], num=end_idx, endpoint=False, dtype=np.int)
+        two_d_feats_tensor = torch.FloatTensor(two_d_feats[feat_idxs]).to(device)
+
+        end_idx = min(three_d_feats.shape[0], max_feat_len)
+        feat_idxs = np.linspace(0, three_d_feats.shape[0], num=end_idx, endpoint=False, dtype=np.int)
+        three_d_feats_tensor = torch.FloatTensor(three_d_feats[feat_idxs]).to(device)
+
+        end_idx = min(audio_feats.shape[0], max_feat_len)
+        feat_idxs = np.linspace(0, audio_feats.shape[0], num=end_idx, endpoint=False, dtype=np.int)
+        audio_feats_tensor = torch.FloatTensor(audio_feats[feat_idxs]).to(device)
+
+        _, senti, _ = senti_detector.sample(two_d_feats_tensor, three_d_feats_tensor, audio_feats_tensor)
+        vis_sentiments[fn] = senti
     json.dump(vis_sentiments, open(os.path.join('./data/captions', dataset_name, 'vis_sentiments.json'), 'w'))
 
 

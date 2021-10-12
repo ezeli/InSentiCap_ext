@@ -15,7 +15,7 @@ from opts import parse_opt
 from models.captioner import Captioner
 from models.decoder import Detector
 from models.sent_senti_cls import SentenceSentimentClassifier
-from dataloader import get_caption_dataloader, get_senti_corpus_with_sentis_dataloader
+from dataloader import get_vid_caption_dataloader, get_senti_corpus_with_sentis_dataloader
 
 
 def clip_gradient(optimizer, grad_clip):
@@ -161,14 +161,14 @@ def train():
 
     region_feats = os.path.join(opt.feats_dir, dataset_name, '%s_36_att.h5' % dataset_name)
     spatial_feats = os.path.join(opt.feats_dir, dataset_name, '%s_att.h5' % dataset_name)
-    train_data = get_caption_dataloader(region_feats, spatial_feats, img_captions['train'], vis_sentiments,
-                                        img_det_concepts, img_det_sentiments, idx2word.index('<PAD>'),
-                                        opt.max_seq_len, opt.num_concepts, opt.num_sentiments,
-                                        opt.rl_bs, opt.rl_num_works, mode='rl')
-    val_data = get_caption_dataloader(region_feats, spatial_feats, img_captions['val'], vis_sentiments,
-                                      img_det_concepts, img_det_sentiments, idx2word.index('<PAD>'),
-                                      opt.max_seq_len, opt.num_concepts, opt.num_sentiments, opt.rl_bs,
-                                      opt.rl_num_works, shuffle=False, mode='rl')
+    train_data = get_vid_caption_dataloader(region_feats, spatial_feats, img_captions['train'], vis_sentiments,
+                                            img_det_concepts, img_det_sentiments, idx2word.index('<PAD>'),
+                                            opt.max_seq_len, opt.num_concepts, opt.num_sentiments,
+                                            opt.rl_bs, opt.rl_num_works, mode='rl')
+    val_data = get_vid_caption_dataloader(region_feats, spatial_feats, img_captions['val'], vis_sentiments,
+                                          img_det_concepts, img_det_sentiments, idx2word.index('<PAD>'),
+                                          opt.max_seq_len, opt.num_concepts, opt.num_sentiments, opt.rl_bs,
+                                          opt.rl_num_works, shuffle=False, mode='rl')
     scs_data = get_senti_corpus_with_sentis_dataloader(
         senti_captions, idx2word.index('<PAD>'), opt.max_seq_len,
         opt.num_concepts, opt.num_sentiments, opt.rl_bs, opt.rl_num_works)
@@ -176,10 +176,10 @@ def train():
     test_captions = {}
     for fn in img_captions['test']:
         test_captions[fn] = [[[], -1]]
-    test_data = get_caption_dataloader(region_feats, spatial_feats, test_captions, vis_sentiments,
-                                       img_det_concepts, img_det_sentiments, idx2word.index('<PAD>'),
-                                       opt.max_seq_len, opt.num_concepts, opt.num_sentiments, opt.rl_bs,
-                                       opt.rl_num_works, shuffle=False, mode='rl')
+    test_data = get_vid_caption_dataloader(region_feats, spatial_feats, test_captions, vis_sentiments,
+                                           img_det_concepts, img_det_sentiments, idx2word.index('<PAD>'),
+                                           opt.max_seq_len, opt.num_concepts, opt.num_sentiments, opt.rl_bs,
+                                           opt.rl_num_works, shuffle=False, mode='rl')
     # lms = {}
     # lm_dir = os.path.join(opt.captions_dir, dataset_name, corpus_type, 'lm')
     # for senti, i in senti_label2idx.items():

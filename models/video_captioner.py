@@ -161,7 +161,7 @@ class Captioner(nn.Module):
             for i, senti_label in enumerate(senti_labels):
                 senti_label = int(senti_label)
                 sen_feat = self.vis_encoders[feat_type]['sen'][senti_label](emb_feats[i:i + 1],
-                                                                            feat_masks[i:i + 1] if feat_masks else None)
+                                                                            feat_masks[i:i + 1] if feat_masks is not None else None)
                 sen_feats.append(sen_feat)
             sen_feats = torch.cat(sen_feats, 0)
             res[feat_type] = [con_feats, sen_feats, feat_masks]
@@ -259,7 +259,6 @@ class Captioner(nn.Module):
         two_d_feats_tensor = two_d_feats_tensor.unsqueeze(0)  # [1, num, att_feat]
         three_d_feats_tensor = three_d_feats_tensor.unsqueeze(0)  # [1, num, att_feat]
         audio_feats_tensor = audio_feats_tensor.unsqueeze(0)  # [1, num, att_feat]
-        senti_label = senti_label.unsqueeze(0)  # [1]
         cpt_words = cpt_words.unsqueeze(0)  # [1, num]
         senti_words = senti_words.unsqueeze(0)  # [1, num]
 
