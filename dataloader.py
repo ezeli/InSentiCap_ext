@@ -29,13 +29,13 @@ def create_collate_fn(name, pad_index=0, max_seq_len=17, num_concepts=5,
         spatial_feats = torch.FloatTensor(np.array(spatial_feats))
         vis_sentis = torch.LongTensor(np.array(vis_sentis))
         xe_senti_labels = torch.LongTensor(np.array(xe_senti_labels))
-
+ 
         lengths = [min(len(c), max_seq_len) for c in caps]
         caps_tensor = torch.LongTensor(len(caps), lengths[0]).fill_(pad_index)
         for i, c in enumerate(caps):
             end = lengths[i]
             caps_tensor[i, :end] = torch.LongTensor(c[:end])
-        lengths = [l-1 for l in lengths]
+        lengths = [l - 1 for l in lengths]
 
         cpts_tensor = torch.LongTensor(len(cpts), num_concepts).fill_(pad_index)
         for i, c in enumerate(cpts):
@@ -47,7 +47,8 @@ def create_collate_fn(name, pad_index=0, max_seq_len=17, num_concepts=5,
             end = min(len(s), num_sentiments)
             sentis_tensor[i, :end] = torch.LongTensor(s[:end])
 
-        return fns, vis_sentis, region_feats, spatial_feats, (caps_tensor, lengths), xe_senti_labels, cpts_tensor, sentis_tensor, ground_truth
+        return fns, vis_sentis, region_feats, spatial_feats, (
+        caps_tensor, lengths), xe_senti_labels, cpts_tensor, sentis_tensor, ground_truth
 
     def scs_collate_fn(dataset):
         dataset.sort(key=lambda p: len(p[0]), reverse=True)
@@ -59,7 +60,7 @@ def create_collate_fn(name, pad_index=0, max_seq_len=17, num_concepts=5,
         for i, c in enumerate(caps):
             end = lengths[i]
             caps_tensor[i, :end] = torch.LongTensor(c[:end])
-        lengths = [l-1 for l in lengths]
+        lengths = [l - 1 for l in lengths]
 
         cpts_tensor = torch.LongTensor(len(cpts), num_concepts).fill_(pad_index)
         for i, c in enumerate(cpts):
@@ -191,11 +192,12 @@ class SentiSentDataset(data.Dataset):
         return len(self.senti_sentences)
 
 
-def get_vid_caption_dataloader(region_feats, spatial_feats, img_captions, vis_sentiments,
-                               img_det_concepts, img_det_sentiments,
-                               pad_index, max_seq_len, num_concepts, num_sentiments,
-                               batch_size, num_workers=0, shuffle=True, mode='xe'):
-    dataset = CaptionDataset(region_feats, spatial_feats, img_captions, vis_sentiments, img_det_concepts, img_det_sentiments)
+def get_caption_dataloader(region_feats, spatial_feats, img_captions, vis_sentiments,
+                           img_det_concepts, img_det_sentiments,
+                           pad_index, max_seq_len, num_concepts, num_sentiments,
+                           batch_size, num_workers=0, shuffle=True, mode='xe'):
+    dataset = CaptionDataset(region_feats, spatial_feats, img_captions, vis_sentiments, img_det_concepts,
+                             img_det_sentiments)
     dataloader = data.DataLoader(dataset,
                                  batch_size=batch_size,
                                  shuffle=shuffle,
@@ -207,8 +209,8 @@ def get_vid_caption_dataloader(region_feats, spatial_feats, img_captions, vis_se
 
 
 def get_senti_corpus_with_sentis_dataloader(senti_corpus_with_sentis,
-                           pad_index, max_seq_len, num_concepts, num_sentiments,
-                           batch_size, num_workers=0, shuffle=True):
+                                            pad_index, max_seq_len, num_concepts, num_sentiments,
+                                            batch_size, num_workers=0, shuffle=True):
     dataset = SCSDataset(senti_corpus_with_sentis)
     dataloader = data.DataLoader(dataset,
                                  batch_size=batch_size,
@@ -305,7 +307,7 @@ def video_create_collate_fn(name, pad_index=0, max_seq_len=17, num_concepts=5,
         for i, c in enumerate(caps):
             end = lengths[i]
             caps_tensor[i, :end] = torch.LongTensor(c[:end])
-        lengths = [l-1 for l in lengths]
+        lengths = [l - 1 for l in lengths]
 
         cpts_tensor = torch.LongTensor(len(cpts), num_concepts).fill_(pad_index)
         for i, c in enumerate(cpts):
@@ -317,7 +319,9 @@ def video_create_collate_fn(name, pad_index=0, max_seq_len=17, num_concepts=5,
             end = min(len(s), num_sentiments)
             sentis_tensor[i, :end] = torch.LongTensor(s[:end])
 
-        return fns, vis_sentis, (two_d_feats_tensor, two_d_feats_lengths), (three_d_feats_tensor, three_d_feats_lengths), (audio_feats_tensor, audio_feats_lengths), (caps_tensor, lengths), xe_senti_labels, cpts_tensor, sentis_tensor, ground_truth
+        return fns, vis_sentis, (two_d_feats_tensor, two_d_feats_lengths), (
+        three_d_feats_tensor, three_d_feats_lengths), (audio_feats_tensor, audio_feats_lengths), (
+               caps_tensor, lengths), xe_senti_labels, cpts_tensor, sentis_tensor, ground_truth
 
     def concept_collate_fn(dataset):
         fns, two_d_feats, three_d_feats, audio_feats, cpts = zip(*dataset)
@@ -354,7 +358,8 @@ def video_create_collate_fn(name, pad_index=0, max_seq_len=17, num_concepts=5,
             end_idx = audio_feats_lengths[i]
             feat_idxs = np.linspace(0, c.shape[0], num=end_idx, endpoint=False, dtype=np.int)
             audio_feats_tensor[i, :end_idx] = torch.FloatTensor(c[feat_idxs])
-        return fns, (two_d_feats_tensor, two_d_feats_lengths), (three_d_feats_tensor, three_d_feats_lengths), (audio_feats_tensor, audio_feats_lengths), senti_labels
+        return fns, (two_d_feats_tensor, two_d_feats_lengths), (three_d_feats_tensor, three_d_feats_lengths), (
+        audio_feats_tensor, audio_feats_lengths), senti_labels
 
     if name == 'concept':
         return concept_collate_fn

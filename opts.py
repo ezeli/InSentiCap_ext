@@ -86,7 +86,7 @@ def parse_opt():
     settings['h'] = 8  # multi heads num
     settings['N_enc'] = 1  # encoder layers num
     settings['N_dec'] = 4  # decoder layers num
-    settings['dropout_p'] = 0.5
+    settings['dropout_p'] = 0.1
     settings['max_seq_len'] = args.max_seq_len
 
     settings['word_emb_dim'] = settings['d_model']

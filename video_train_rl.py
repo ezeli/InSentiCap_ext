@@ -12,10 +12,10 @@ import torch
 import random
 
 from opts import parse_opt
-from models.captioner import Captioner
-from models.decoder import Detector
+from models.video_captioner import Captioner
+from models.video_decoder import Detector
 from models.sent_senti_cls import SentenceSentimentClassifier
-from dataloader import get_caption_dataloader, get_senti_corpus_with_sentis_dataloader
+from dataloader import get_vid_caption_dataloader, get_senti_corpus_with_sentis_dataloader
 
 
 def clip_gradient(optimizer, grad_clip):
@@ -29,12 +29,12 @@ def train():
     corpus_type = opt.corpus_type
 
     idx2word = json.load(open(os.path.join(opt.captions_dir, dataset_name, corpus_type, 'idx2word.json'), 'r'))
-    img_captions = json.load(
-        open(os.path.join(opt.captions_dir, dataset_name, corpus_type, 'img_captions_senti.json'), 'r'))
+    vid_captions = json.load(
+        open(os.path.join(opt.captions_dir, dataset_name, corpus_type, 'vid_captions_senti.json'), 'r'))
     vis_sentiments = json.load(open(os.path.join(opt.captions_dir, dataset_name, 'vis_sentiments.json'), 'r'))
-    img_det_concepts = json.load(open(os.path.join(opt.captions_dir, dataset_name, 'img_det_concepts.json'), 'r'))
-    img_det_sentiments = json.load(
-        open(os.path.join(opt.captions_dir, dataset_name, corpus_type, 'img_det_sentiments.json'), 'r'))
+    vid_det_concepts = json.load(open(os.path.join(opt.captions_dir, dataset_name, 'vid_det_concepts.json'), 'r'))
+    vid_det_sentiments = json.load(
+        open(os.path.join(opt.captions_dir, dataset_name, corpus_type, 'vid_det_sentiments.json'), 'r'))
     senti_captions = json.load(
         open(os.path.join(opt.captions_dir, dataset_name, corpus_type, 'senti_captions.json'), 'r'))
 
@@ -45,8 +45,6 @@ def train():
     if opt.rl_resume:
         print("====> loading checkpoint '{}'".format(opt.rl_resume))
         chkpoint = torch.load(opt.rl_resume, map_location=lambda s, l: s)
-        assert opt.settings == chkpoint['settings'], \
-            'opt.settings and resume model settings are different'
         assert idx2word == chkpoint['idx2word'], \
             'idx2word and resume model idx2word are different'
         assert opt.max_seq_len == chkpoint['max_seq_len'], \
@@ -63,7 +61,7 @@ def train():
         print("====> loaded checkpoint '{}', epoch: {}"
               .format(opt.rl_resume, chkpoint['epoch']))
     else:
-        rl_xe_resume = os.path.join(opt.checkpoint, 'xe', dataset_name, corpus_type, 'att_and_mean_fuse/model-best.pth')
+        rl_xe_resume = os.path.join(opt.checkpoint, 'xe', dataset_name, corpus_type, 'model-best.pth')
         print("====> loading checkpoint '{}'".format(rl_xe_resume))
         chkpoint = torch.load(rl_xe_resume, map_location=lambda s, l: s)
         assert opt.settings == chkpoint['settings'], \
@@ -107,7 +105,7 @@ def train():
 
     print('====> process image captions begin')
     captions_id = {}
-    for split, caps in img_captions.items():
+    for split, caps in vid_captions.items():
         print('convert %s captions to index' % split)
         captions_id[split] = {}
         for fn, seqs in tqdm.tqdm(caps.items(), ncols=100):
@@ -117,7 +115,7 @@ def train():
                             [word2idx.get(w, None) or word2idx['<UNK>'] for w in seq] +
                             [captioner.eos_id], senti_label2idx[senti]])
             captions_id[split][fn] = tmp
-    img_captions = captions_id
+    vid_captions = captions_id
     print('====> process image captions end')
 
     print('====> process vis_sentiments begin')
@@ -129,16 +127,16 @@ def train():
 
     print('====> process image det_concepts begin')
     det_concepts_id = {}
-    for fn, cpts in tqdm.tqdm(img_det_concepts.items(), ncols=100):
+    for fn, cpts in tqdm.tqdm(vid_det_concepts.items(), ncols=100):
         det_concepts_id[fn] = [word2idx[w] for w in cpts]
-    img_det_concepts = det_concepts_id
+    vid_det_concepts = det_concepts_id
     print('====> process image det_concepts end')
 
     print('====> process image det_sentiments begin')
     det_sentiments_id = {}
-    for fn, sentis in tqdm.tqdm(img_det_sentiments.items(), ncols=100):
+    for fn, sentis in tqdm.tqdm(vid_det_sentiments.items(), ncols=100):
         det_sentiments_id[fn] = [word2idx[w] for w in sentis]
-    img_det_sentiments = det_sentiments_id
+    vid_det_sentiments = det_sentiments_id
     print('====> process image det_concepts end')
 
     senti_label2idx = {}
@@ -165,39 +163,39 @@ def train():
     senti_captions = senti_captions_id
     print('====> process senti corpus end')
 
-    region_feats = os.path.join(opt.feats_dir, dataset_name, '%s_36_att.h5' % dataset_name)
-    spatial_feats = os.path.join(opt.feats_dir, dataset_name, '%s_att.h5' % dataset_name)
-    train_data = get_caption_dataloader(region_feats, spatial_feats, img_captions['train'], vis_sentiments,
-                                        img_det_concepts, img_det_sentiments, idx2word.index('<PAD>'),
-                                        opt.max_seq_len, opt.num_concepts, opt.num_sentiments,
-                                        opt.rl_bs, opt.rl_num_works, mode='rl')
-    val_data = get_caption_dataloader(region_feats, spatial_feats, img_captions['val'], vis_sentiments,
-                                      img_det_concepts, img_det_sentiments, idx2word.index('<PAD>'),
-                                      opt.max_seq_len, opt.num_concepts, opt.num_sentiments, opt.rl_bs,
-                                      opt.rl_num_works, shuffle=False, mode='rl')
+    two_d_feature_file = os.path.join(opt.feats_dir, dataset_name, '%s_ResNet101.h5' % dataset_name)
+    three_d_feature_file = os.path.join(opt.feats_dir, dataset_name, '%s_3DResNext101.h5' % dataset_name)
+    audio_feature_file = os.path.join(opt.feats_dir, dataset_name, '%s_audio_VGGish.pickle' % dataset_name)
+    train_data = get_vid_caption_dataloader(two_d_feature_file, three_d_feature_file, audio_feature_file,
+                                            vid_captions['train'], vis_sentiments,
+                                            vid_det_concepts, vid_det_sentiments, idx2word.index('<PAD>'),
+                                            opt.max_seq_len, opt.num_concepts, opt.num_sentiments,
+                                            opt.rl_bs, opt.rl_num_works)
+    val_data = get_vid_caption_dataloader(two_d_feature_file, three_d_feature_file, audio_feature_file,
+                                          vid_captions['val'], vis_sentiments,
+                                          vid_det_concepts, vid_det_sentiments, idx2word.index('<PAD>'),
+                                          opt.max_seq_len, opt.num_concepts, opt.num_sentiments, opt.rl_bs,
+                                          opt.rl_num_works, shuffle=False)
     scs_data = get_senti_corpus_with_sentis_dataloader(
         senti_captions, idx2word.index('<PAD>'), opt.max_seq_len,
-        opt.num_concepts, opt.num_sentiments, opt.rl_bs, opt.rl_num_works)
+        opt.num_concepts, opt.num_sentiments, opt.rl_bs * 4, opt.rl_num_works)
 
     test_captions = {}
-    for fn in img_captions['test']:
+    for fn in vid_captions['test']:
         test_captions[fn] = [[[], -1]]
-    test_data = get_caption_dataloader(region_feats, spatial_feats, test_captions, vis_sentiments,
-                                       img_det_concepts, img_det_sentiments, idx2word.index('<PAD>'),
-                                       opt.max_seq_len, opt.num_concepts, opt.num_sentiments, opt.rl_bs,
-                                       opt.rl_num_works, shuffle=False, mode='rl')
-    # lms = {}
-    # lm_dir = os.path.join(opt.captions_dir, dataset_name, corpus_type, 'lm')
-    # for senti, i in senti_label2idx.items():
-    #     lms[i] = kenlm.LanguageModel(os.path.join(lm_dir, '%s_id.kenlm.arpa' % senti))
-    # model.set_lms(lms)
-    model = Detector(captioner, optimizer, sent_senti_cls)
-    model.set_ciderd_scorer(img_captions)
+    test_data = get_vid_caption_dataloader(two_d_feature_file, three_d_feature_file, audio_feature_file,
+                                           test_captions, vis_sentiments,
+                                           vid_det_concepts, vid_det_sentiments, idx2word.index('<PAD>'),
+                                           opt.max_seq_len, opt.num_concepts, opt.num_sentiments, opt.rl_bs,
+                                           opt.rl_num_works, shuffle=False)
 
-    tmp_dir = 'zfyi/20cls_005xe_005seq_500'
+    model = Detector(captioner, optimizer, sent_senti_cls)
+    model.set_ciderd_scorer(vid_captions)
+
+    tmp_dir = '1_4_500'
     checkpoint = os.path.join(opt.checkpoint, 'rl', dataset_name, corpus_type, tmp_dir)
-    # if not os.path.exists(checkpoint):
-    #     os.makedirs(checkpoint)
+    if not os.path.exists(checkpoint):
+        os.makedirs(checkpoint)
     result_dir = os.path.join(opt.result_dir, 'rl', dataset_name, corpus_type, tmp_dir)
     if not os.path.exists(result_dir):
         os.makedirs(result_dir)
@@ -216,16 +214,22 @@ def train():
             # test
             results = defaultdict(list)
             det_sentis = {}
-            for fns, vis_sentis, region_feats, spatial_feats, _, _, cpts_tensor, sentis_tensor, _ in tqdm.tqdm(
+            for fns, vis_sentis, (two_d_feats_tensor, two_d_feats_lengths), \
+                (three_d_feats_tensor, three_d_feats_lengths), (audio_feats_tensor, audio_feats_lengths), \
+                _, _, cpts_tensor, sentis_tensor, _ in tqdm.tqdm(
                     test_data, ncols=100):
                 vis_sentis = vis_sentis.to(opt.device)
-                region_feats = region_feats.to(opt.device)
-                spatial_feats = spatial_feats.to(opt.device)
+                two_d_feats_tensor = two_d_feats_tensor.to(opt.device)
+                three_d_feats_tensor = three_d_feats_tensor.to(opt.device)
+                audio_feats_tensor = audio_feats_tensor.to(opt.device)
                 cpts_tensor = cpts_tensor.to(opt.device)
                 sentis_tensor = sentis_tensor.to(opt.device)
                 for i, fn in enumerate(fns):
                     captions, _ = model.captioner.sample(
-                        region_feats[i], spatial_feats[i], vis_sentis[i:i + 1], cpts_tensor[i], sentis_tensor[i],
+                        two_d_feats_tensor[i, :two_d_feats_lengths[i]],
+                        three_d_feats_tensor[i, :three_d_feats_lengths[i]],
+                        audio_feats_tensor[i, :audio_feats_lengths[i]],
+                        vis_sentis[i:i + 1], cpts_tensor[i], sentis_tensor[i],
                         beam_size=opt.beam_size)
                     det_img_senti = opt.sentiment_categories[int(vis_sentis[i])]
                     results[det_img_senti].append({'image_id': fn, 'caption': captions[0]})

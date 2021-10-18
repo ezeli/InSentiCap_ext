@@ -13,7 +13,7 @@ import torch
 from opts import parse_opt
 from models.captioner import Captioner
 from models.sent_senti_cls import SentenceSentimentClassifier
-from dataloader import get_vid_caption_dataloader, get_senti_corpus_with_sentis_dataloader
+from dataloader import get_caption_dataloader, get_senti_corpus_with_sentis_dataloader
 
 
 def clip_gradient(optimizer, grad_clip):
@@ -28,10 +28,13 @@ def train():
     corpus_type = opt.corpus_type
 
     idx2word = json.load(open(os.path.join(opt.captions_dir, dataset_name, corpus_type, 'idx2word.json'), 'r'))
-    img_captions = json.load(open(os.path.join(opt.captions_dir, dataset_name, corpus_type, 'img_captions_senti.json'), 'r'))
+    img_captions = json.load(
+        open(os.path.join(opt.captions_dir, dataset_name, corpus_type, 'img_captions_senti.json'), 'r'))
     img_det_concepts = json.load(open(os.path.join(opt.captions_dir, dataset_name, 'img_det_concepts.json'), 'r'))
-    img_det_sentiments = json.load(open(os.path.join(opt.captions_dir, dataset_name, corpus_type, 'img_det_sentiments.json'), 'r'))
-    senti_captions = json.load(open(os.path.join(opt.captions_dir, dataset_name, corpus_type, 'senti_captions.json'), 'r'))
+    img_det_sentiments = json.load(
+        open(os.path.join(opt.captions_dir, dataset_name, corpus_type, 'img_det_sentiments.json'), 'r'))
+    senti_captions = json.load(
+        open(os.path.join(opt.captions_dir, dataset_name, corpus_type, 'senti_captions.json'), 'r'))
 
     captioner = Captioner(idx2word, opt.sentiment_categories, opt.settings)
     captioner.to(opt.device)
@@ -73,8 +76,8 @@ def train():
             tmp = []
             for seq, senti in seqs:
                 tmp.append([[captioner.sos_id] +
-                           [word2idx.get(w, None) or word2idx['<UNK>'] for w in seq] +
-                           [captioner.eos_id], senti_label2idx[senti]])
+                            [word2idx.get(w, None) or word2idx['<UNK>'] for w in seq] +
+                            [captioner.eos_id], senti_label2idx[senti]])
             captions_id[split][fn] = tmp
     img_captions = captions_id
     print('====> process image captions end')
@@ -94,16 +97,18 @@ def train():
     print('====> process image det_concepts end')
 
     print('====> process senti corpus begin')
-    senti_captions['positive'] = senti_captions['positive'] * int(len(senti_captions['neutral']) / len(senti_captions['positive']))
-    senti_captions['negative'] = senti_captions['negative'] * int(len(senti_captions['neutral']) / len(senti_captions['negative']))
+    senti_captions['positive'] = senti_captions['positive'] * int(
+        len(senti_captions['neutral']) / len(senti_captions['positive']))
+    senti_captions['negative'] = senti_captions['negative'] * int(
+        len(senti_captions['neutral']) / len(senti_captions['negative']))
     # del senti_captions['neutral']
     senti_captions_id = []
     for senti, caps in senti_captions.items():
         print('convert %s corpus to index' % senti)
         senti_id = senti_label2idx[senti]
         for cap, cpts, sentis in tqdm.tqdm(caps, ncols=100):
-            cap = [captioner.sos_id] +\
-                  [word2idx.get(w, None) or word2idx['<UNK>'] for w in cap] +\
+            cap = [captioner.sos_id] + \
+                  [word2idx.get(w, None) or word2idx['<UNK>'] for w in cap] + \
                   [captioner.eos_id]
             cpts = [word2idx[w] for w in cpts if w in word2idx]
             sentis = [word2idx[w] for w in sentis]
@@ -113,32 +118,33 @@ def train():
 
     region_feats = os.path.join(opt.feats_dir, dataset_name, '%s_36_att.h5' % dataset_name)
     spatial_feats = os.path.join(opt.feats_dir, dataset_name, '%s_att.h5' % dataset_name)
-    train_data = get_vid_caption_dataloader(region_feats, spatial_feats, img_captions['train'], {},
-                                            img_det_concepts, img_det_sentiments, idx2word.index('<PAD>'),
-                                            opt.max_seq_len, opt.num_concepts, opt.num_sentiments,
-                                            opt.xe_bs, opt.xe_num_works)
-    val_data = get_vid_caption_dataloader(region_feats, spatial_feats, img_captions['val'], {},
-                                          img_det_concepts, img_det_sentiments, idx2word.index('<PAD>'),
-                                          opt.max_seq_len, opt.num_concepts, opt.num_sentiments, opt.xe_bs,
-                                          opt.xe_num_works, shuffle=False)
+    train_data = get_caption_dataloader(region_feats, spatial_feats, img_captions['train'], {},
+                                        img_det_concepts, img_det_sentiments, idx2word.index('<PAD>'),
+                                        opt.max_seq_len, opt.num_concepts, opt.num_sentiments,
+                                        opt.xe_bs, opt.xe_num_works)
+    val_data = get_caption_dataloader(region_feats, spatial_feats, img_captions['val'], {},
+                                      img_det_concepts, img_det_sentiments, idx2word.index('<PAD>'),
+                                      opt.max_seq_len, opt.num_concepts, opt.num_sentiments, opt.xe_bs,
+                                      opt.xe_num_works, shuffle=False)
     scs_data = get_senti_corpus_with_sentis_dataloader(
         senti_captions, idx2word.index('<PAD>'), opt.max_seq_len,
-        opt.num_concepts, opt.num_sentiments, opt.xe_bs*4, opt.xe_num_works)
+        opt.num_concepts, opt.num_sentiments, opt.xe_bs * 4, opt.xe_num_works)
 
     test_captions = {}
     for fn in img_captions['test']:
         test_captions[fn] = [[[], -1]]
-    test_data = get_vid_caption_dataloader(region_feats, spatial_feats, test_captions, {},
-                                           img_det_concepts, img_det_sentiments, idx2word.index('<PAD>'),
-                                           opt.max_seq_len, opt.num_concepts, opt.num_sentiments, opt.xe_bs,
-                                           opt.xe_num_works, shuffle=False)
+    test_data = get_caption_dataloader(region_feats, spatial_feats, test_captions, {},
+                                       img_det_concepts, img_det_sentiments, idx2word.index('<PAD>'),
+                                       opt.max_seq_len, opt.num_concepts, opt.num_sentiments, opt.xe_bs,
+                                       opt.xe_num_works, shuffle=False)
 
     def forward(data, training=True):
         captioner.train(training)
         if training:
             seq2seq_data = iter(scs_data)
         loss_val = defaultdict(float)
-        for _, _, region_feats, spatial_feats, (caps_tensor, lengths), xe_senti_labels, cpts_tensor, sentis_tensor, _ in tqdm.tqdm(data, ncols=100):
+        for _, _, region_feats, spatial_feats, (
+        caps_tensor, lengths), xe_senti_labels, cpts_tensor, sentis_tensor, _ in tqdm.tqdm(data, ncols=100):
             region_feats = region_feats.to(opt.device)
             spatial_feats = spatial_feats.to(opt.device)
             caps_tensor = caps_tensor.to(opt.device)
@@ -207,7 +213,8 @@ def train():
                 senti_label = torch.LongTensor([captioner.neu_idx]).to(opt.device)
                 results = []
                 fact_txt = ''
-                for fns, _, region_feats, spatial_feats, _, _, cpts_tensor, sentis_tensor, _ in tqdm.tqdm(test_data, ncols=100):
+                for fns, _, region_feats, spatial_feats, _, _, cpts_tensor, sentis_tensor, _ in tqdm.tqdm(test_data,
+                                                                                                          ncols=100):
                     region_feats = region_feats.to(opt.device)
                     spatial_feats = spatial_feats.to(opt.device)
                     cpts_tensor = cpts_tensor.to(opt.device)
