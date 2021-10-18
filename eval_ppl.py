@@ -12,6 +12,8 @@ def compute_ppl(captions_file_prefix):
     dataset_name = 'coco'
     if 'flickr30k' in captions_file_prefix:
         dataset_name = 'flickr30k'
+    elif 'msrvtt' in captions_file_prefix:
+        dataset_name = 'msrvtt'
     corpus_type = 'part'
     if 'full' in captions_file_prefix:
         corpus_type = 'full'

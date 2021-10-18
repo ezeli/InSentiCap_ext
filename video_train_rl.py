@@ -61,7 +61,7 @@ def train():
         print("====> loaded checkpoint '{}', epoch: {}"
               .format(opt.rl_resume, chkpoint['epoch']))
     else:
-        rl_xe_resume = os.path.join(opt.checkpoint, 'xe', dataset_name, corpus_type, 'model-best.pth')
+        rl_xe_resume = os.path.join(opt.checkpoint, 'xe', dataset_name, corpus_type, '1_4/model-best.pth')
         print("====> loading checkpoint '{}'".format(rl_xe_resume))
         chkpoint = torch.load(rl_xe_resume, map_location=lambda s, l: s)
         assert opt.settings == chkpoint['settings'], \
@@ -170,15 +170,15 @@ def train():
                                             vid_captions['train'], vis_sentiments,
                                             vid_det_concepts, vid_det_sentiments, idx2word.index('<PAD>'),
                                             opt.max_seq_len, opt.num_concepts, opt.num_sentiments,
-                                            opt.rl_bs, opt.rl_num_works)
+                                            opt.rl_bs, opt.rl_num_works, mode='rl')
     val_data = get_vid_caption_dataloader(two_d_feature_file, three_d_feature_file, audio_feature_file,
                                           vid_captions['val'], vis_sentiments,
                                           vid_det_concepts, vid_det_sentiments, idx2word.index('<PAD>'),
                                           opt.max_seq_len, opt.num_concepts, opt.num_sentiments, opt.rl_bs,
-                                          opt.rl_num_works, shuffle=False)
+                                          opt.rl_num_works, shuffle=False, mode='rl')
     scs_data = get_senti_corpus_with_sentis_dataloader(
         senti_captions, idx2word.index('<PAD>'), opt.max_seq_len,
-        opt.num_concepts, opt.num_sentiments, opt.rl_bs * 4, opt.rl_num_works)
+        opt.num_concepts, opt.num_sentiments, opt.rl_bs, opt.rl_num_works)
 
     test_captions = {}
     for fn in vid_captions['test']:
@@ -187,7 +187,7 @@ def train():
                                            test_captions, vis_sentiments,
                                            vid_det_concepts, vid_det_sentiments, idx2word.index('<PAD>'),
                                            opt.max_seq_len, opt.num_concepts, opt.num_sentiments, opt.rl_bs,
-                                           opt.rl_num_works, shuffle=False)
+                                           opt.rl_num_works, shuffle=False, mode='rl')
 
     model = Detector(captioner, optimizer, sent_senti_cls)
     model.set_ciderd_scorer(vid_captions)
