@@ -45,7 +45,7 @@ def get_ciderd_scorer(split_captions, sos_token, eos_token):
     for caps in tqdm.tqdm(captions.values(), ncols=100):
         ref_idxs = []
         for cap in caps:
-            ref_idxs.append(_array_to_str(cap, sos_token, eos_token))
+            ref_idxs.append(_array_to_str(cap[0], sos_token, eos_token))
         refs_idxs.append(ref_idxs)
 
     scorer = CiderD(refs=refs_idxs)

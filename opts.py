@@ -44,7 +44,7 @@ def parse_opt():
     parser.add_argument('--rl_num_works', type=int, default=2)
     parser.add_argument('--rl_resume', type=str, default='')
     parser.add_argument('--rl_senti_resume', type=str, default='checkpoint/sentiment/model-10.pth')
-    parser.add_argument('--rl_epochs', type=int, default=40)
+    parser.add_argument('--rl_epochs', type=int, default=100)
 
     # common
     parser.add_argument('--dataset_name', type=str, default='msrvtt', choices=['coco', 'flickr30k', 'msrvtt'])

@@ -45,8 +45,6 @@ def train():
     if opt.rl_resume:
         print("====> loading checkpoint '{}'".format(opt.rl_resume))
         chkpoint = torch.load(opt.rl_resume, map_location=lambda s, l: s)
-        assert opt.settings == chkpoint['settings'], \
-            'opt.settings and resume model settings are different'
         assert idx2word == chkpoint['idx2word'], \
             'idx2word and resume model idx2word are different'
         assert opt.max_seq_len == chkpoint['max_seq_len'], \
@@ -66,8 +64,6 @@ def train():
         rl_xe_resume = os.path.join(opt.checkpoint, 'xe', dataset_name, corpus_type, 'att_and_mean_fuse/model-best.pth')
         print("====> loading checkpoint '{}'".format(rl_xe_resume))
         chkpoint = torch.load(rl_xe_resume, map_location=lambda s, l: s)
-        assert opt.settings == chkpoint['settings'], \
-            'opt.settings and resume model settings are different'
         assert idx2word == chkpoint['idx2word'], \
             'idx2word and resume model idx2word are different'
         assert opt.sentiment_categories == chkpoint['sentiment_categories'], \

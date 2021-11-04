@@ -192,7 +192,7 @@ def train():
     model = Detector(captioner, optimizer, sent_senti_cls)
     model.set_ciderd_scorer(vid_captions)
 
-    tmp_dir = '1_4_500'
+    tmp_dir = '1_4_50'
     checkpoint = os.path.join(opt.checkpoint, 'rl', dataset_name, corpus_type, tmp_dir)
     if not os.path.exists(checkpoint):
         os.makedirs(checkpoint)
