@@ -10,6 +10,7 @@ import traceback
 from bdb import BdbQuit
 import torch
 import random
+import kenlm
 
 from opts import parse_opt
 from models.video_captioner import Captioner
@@ -192,7 +193,13 @@ def train():
     model = Detector(captioner, optimizer, sent_senti_cls)
     model.set_ciderd_scorer(vid_captions)
 
-    tmp_dir = '1_4_50'
+    lms = {}
+    lm_dir = os.path.join(opt.captions_dir, dataset_name, corpus_type, 'lm')
+    for senti, i in senti_label2idx.items():
+        lms[i] = kenlm.LanguageModel(os.path.join(lm_dir, '%s_id.kenlm.arpa' % senti))
+    model.set_lms(lms)
+
+    tmp_dir = '1_4_50_lm'
     checkpoint = os.path.join(opt.checkpoint, 'rl', dataset_name, corpus_type, tmp_dir)
     if not os.path.exists(checkpoint):
         os.makedirs(checkpoint)
