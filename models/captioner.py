@@ -138,7 +138,7 @@ class DecoderLayer(nn.Module):
         scores = scores.transpose(2, 3).softmax(-1)  # [bs, seq_len, 1, 2 or 4]
         att_feats = scores.matmul(att_feats).squeeze(2)  # [bs, seq_len, d_model]
         # att_feats = att_feats.mean(2)
-        return x + att_feats
+        return att_feats
 
     def forward(self, captions, seq_masks, cpt_words, senti_words, region_feats, spatial_feats):
         captions = self._add_res_connection(captions, lambda x: self.self_att(x, x, x, seq_masks), 0)
@@ -155,6 +155,7 @@ class DecoderLayer(nn.Module):
             fuse_feats = (sem_feats + vis_feats) / 2
         else:
             fuse_feats = sem_feats
+        fuse_feats = captions + fuse_feats
 
         return self._add_res_connection(fuse_feats, self.feed_forward, -1)
 

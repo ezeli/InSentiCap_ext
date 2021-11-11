@@ -25,9 +25,10 @@ class Detector():
         _, self.cap_xe_crit, self.cap_da_crit = self.captioner.get_optim_criterion(0)
         self.cap_rl_crit = RewardCriterion()
 
-        self.cls_flag = 2.0
-        self.seq_flag = 0.05
-        self.xe_flag = 0.05
+        self.cls_flag = 0.5
+        self.lm_flag = 0.3
+        self.seq_flag = 0.1
+        self.xe_flag = 0.1
 
     def set_ciderd_scorer(self, captions):
         self.ciderd_scorer = get_ciderd_scorer(captions, self.captioner.sos_id, self.captioner.eos_id)
@@ -74,13 +75,13 @@ class Detector():
             cls_reward = torch.from_numpy(cls_reward).float().to(device)
             all_losses['cls_reward'] += float(cls_reward.mean(-1).mean(-1))
 
-            # lm_reward = get_lm_reward(
-            #     sample_captions, greedy_captions, senti_labels,
-            #     self.captioner.sos_id, self.captioner.eos_id, self.lms)
-            # lm_reward = torch.from_numpy(lm_reward).float().to(device)
-            # all_losses['lm_reward'] += float(lm_reward[:, 0].sum())
+            lm_reward = get_lm_reward(
+                sample_captions, greedy_captions, vis_sentis,
+                self.captioner.sos_id, self.captioner.eos_id, self.lms)
+            lm_reward = torch.from_numpy(lm_reward).float().to(device)
+            all_losses['lm_reward'] += float(lm_reward[:, 0].sum())
 
-            rewards = fact_reward + self.cls_flag * cls_reward  # + 0.05 * senti_words_reward
+            rewards = fact_reward + self.cls_flag * cls_reward + self.lm_flag * lm_reward
             all_losses['all_rewards'] += float(rewards.mean(-1).mean(-1))
             cap_loss = self.cap_rl_crit(sample_logprobs, seq_masks, rewards)
             all_losses['cap_loss'] += float(cap_loss)

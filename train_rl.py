@@ -10,6 +10,7 @@ import traceback
 from bdb import BdbQuit
 import torch
 import random
+import kenlm
 
 from opts import parse_opt
 from models.captioner import Captioner
@@ -182,15 +183,17 @@ def train():
                                        img_det_concepts, img_det_sentiments, idx2word.index('<PAD>'),
                                        opt.max_seq_len, opt.num_concepts, opt.num_sentiments, opt.rl_bs,
                                        opt.rl_num_works, shuffle=False, mode='rl')
-    # lms = {}
-    # lm_dir = os.path.join(opt.captions_dir, dataset_name, corpus_type, 'lm')
-    # for senti, i in senti_label2idx.items():
-    #     lms[i] = kenlm.LanguageModel(os.path.join(lm_dir, '%s_id.kenlm.arpa' % senti))
-    # model.set_lms(lms)
+
     model = Detector(captioner, optimizer, sent_senti_cls)
     model.set_ciderd_scorer(img_captions)
 
-    tmp_dir = 'zfyi/20cls_005xe_005seq_500'
+    lms = {}
+    lm_dir = os.path.join(opt.captions_dir, dataset_name, corpus_type, 'lm')
+    for senti, i in senti_label2idx.items():
+        lms[i] = kenlm.LanguageModel(os.path.join(lm_dir, '%s_id.kenlm.arpa' % senti))
+    model.set_lms(lms)
+
+    tmp_dir = '1_4_500_lm_05_03_01_01'
     checkpoint = os.path.join(opt.checkpoint, 'rl', dataset_name, corpus_type, tmp_dir)
     # if not os.path.exists(checkpoint):
     #     os.makedirs(checkpoint)

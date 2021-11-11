@@ -199,7 +199,7 @@ def train():
         lms[i] = kenlm.LanguageModel(os.path.join(lm_dir, '%s_id.kenlm.arpa' % senti))
     model.set_lms(lms)
 
-    tmp_dir = '1_4_50_lm'
+    tmp_dir = '1_4_50_lm_05_03_01_01'
     checkpoint = os.path.join(opt.checkpoint, 'rl', dataset_name, corpus_type, tmp_dir)
     if not os.path.exists(checkpoint):
         os.makedirs(checkpoint)

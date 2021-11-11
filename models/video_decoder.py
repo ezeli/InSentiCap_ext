@@ -25,10 +25,10 @@ class Detector():
         _, self.cap_xe_crit, self.cap_da_crit = self.captioner.get_optim_criterion(0)
         self.cap_rl_crit = RewardCriterion()
 
-        self.cls_flag = 2.0
-        self.lm_flag = 2.0
-        self.seq_flag = 0.05
-        self.xe_flag = 0.05
+        self.cls_flag = 0.5
+        self.lm_flag = 0.3
+        self.seq_flag = 0.1
+        self.xe_flag = 0.1
 
     def set_ciderd_scorer(self, captions):
         self.ciderd_scorer = get_ciderd_scorer(captions, self.captioner.sos_id, self.captioner.eos_id)
