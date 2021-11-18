@@ -32,7 +32,7 @@ def compute_ppl(captions_file_prefix):
     for senti, cmd in lm_cmds.items():
         out = os.popen(cmd).read().split()
         try:
-            scores[senti] = float(out[out.index('ppl=') + 1])
+            scores[senti] = round(float(out[out.index('ppl=') + 1]), 1)
         except Exception:
             scores[senti] = 0
 

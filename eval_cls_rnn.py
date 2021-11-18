@@ -85,7 +85,7 @@ def compute_cls(captions_file_prefix):
                     else:
                         wro_res += cap
         wrong_rate = wrong_num / all_num
-        print('%s acc_rate: %.6f' % (senti, 1 - wrong_rate))
+        print('%s acc_rate: %.1f' % (senti, (1 - wrong_rate) * 100))
         with open(os.path.join(result_dir, senti+'_cor.txt'), 'w') as f:
             f.write(cor_res)
         with open(os.path.join(result_dir, senti+'_wro.txt'), 'w') as f:
