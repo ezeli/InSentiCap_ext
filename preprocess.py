@@ -91,6 +91,129 @@ def process_caption_datasets():
         json.dump(img_concepts, open(os.path.join(opt.captions_dir, dataset_nm, 'img_concepts.json'), 'w'))
 
 
+# def process_senti_corpus():
+#     corpus_type = 'part'
+#     senti_corpus = json.load(open(os.path.join(opt.corpus_dir, corpus_type, 'senti_corpus.json'), 'r'))
+#
+#     tmp_senti_corpus = defaultdict(list)
+#     tmp_senti_corpus_pos = defaultdict(list)
+#     all_sentis = Counter()
+#     sentis = defaultdict(Counter)
+#     sentiment_detector = defaultdict(Counter)
+#
+#     for senti_label, sents in senti_corpus.items():
+#         for i in tqdm.tqdm(range(0, len(sents), 100), ncols=100):
+#             cur_sents = sents[i:i + 100]
+#             tmp_sents = []
+#             for sent in cur_sents:
+#                 tmp_sents.append(nltk.word_tokenize(sent.strip().lower()))
+#             tagged_sents = nltk.pos_tag_sents(tmp_sents, tagset='universal')
+#             for tagged_tokens in tagged_sents:
+#                 words = []
+#                 poses = []
+#                 nouns = []
+#                 adjs = []
+#                 for w, p in tagged_tokens:
+#                     if p == '.':  # remove punctuation
+#                         continue
+#                     words.append(w)
+#                     poses.append(p)
+#                     if p == 'ADJ':
+#                         adjs.append(w)
+#                     elif p == 'NOUN':
+#                         nouns.append(w)
+#                 tmp_senti_corpus[senti_label].append(words)
+#                 tmp_senti_corpus_pos[senti_label].append(poses)
+#                 if adjs:
+#                     all_sentis.update(adjs)
+#                     sentis[senti_label].update(adjs)
+#                     for noun in nouns:
+#                         sentiment_detector[noun].update(adjs)
+#
+#     json.dump(tmp_senti_corpus, open(os.path.join(opt.corpus_dir, corpus_type, 'tmp_senti_corpus.json'), 'w'))
+#     json.dump(tmp_senti_corpus_pos, open(os.path.join(opt.corpus_dir, corpus_type, 'tmp_senti_corpus_pos.json'), 'w'))
+#
+#     all_sentis = all_sentis.most_common()
+#     all_sentis = [w for w in all_sentis if w[1] >= 3]
+#     sentis = {k: v.most_common() for k, v in sentis.items()}
+#     sentiment_detector = {k: v.most_common() for k, v in sentiment_detector.items()}
+#
+#     all_sentis = {k: v for k, v in all_sentis}
+#
+#     len_sentis = defaultdict(int)
+#     for k, v in sentis.items():
+#         for _, n in v:
+#             len_sentis[k] += n
+#     tf_sentis = defaultdict(dict)
+#     tmp_sentis = defaultdict(dict)
+#     for k, v in sentis.items():
+#         for w, n in v:
+#             tf_sentis[k][w] = n / len_sentis[k]
+#             tmp_sentis[k][w] = n
+#     sentis = tmp_sentis
+#
+#     sentis_result = defaultdict(dict)
+#     for k, v in tf_sentis.items():
+#         for w, tf in v.items():
+#             if w in all_sentis:
+#                 sentis_result[k][w] = tf * (sentis[k][w] / all_sentis[w])
+#
+#     sentiment_words = {}
+#     for k in sentis_result:
+#         sentiment_words[k] = list(sentis_result[k].items())
+#         sentiment_words[k].sort(key=lambda p: p[1], reverse=True)
+#         sentiment_words[k] = [w[0] for w in sentiment_words[k]]
+#
+#     common_rm = []
+#     pos_rm = []
+#     neg_rm = []
+#     for i, w in enumerate(sentiment_words['positive']):
+#         if w in sentiment_words['negative']:
+#             n_idx = sentiment_words['negative'].index(w)
+#             if abs(i - n_idx) < 5:
+#                 common_rm.append(w)
+#             elif i > n_idx:
+#                 pos_rm.append(w)
+#             else:
+#                 neg_rm.append(w)
+#     for w in common_rm:
+#         sentiment_words['positive'].remove(w)
+#         sentiment_words['negative'].remove(w)
+#     for w in pos_rm:
+#         sentiment_words['positive'].remove(w)
+#     for w in neg_rm:
+#         sentiment_words['negative'].remove(w)
+#
+#     tmp_sentiment_words = {}
+#     for senti in sentiment_words:
+#         tmp_sentiment_words[senti] = {}
+#         for w in sentiment_words[senti]:
+#             tmp_sentiment_words[senti][w] = sentis_result[senti][w]
+#     sentiment_words = tmp_sentiment_words
+#
+#     json.dump(sentiment_words, open(os.path.join(opt.corpus_dir, corpus_type, 'sentiment_words.json'), 'w'))
+#
+#     tmp_sentiment_words = {}
+#     tmp_sentiment_words.update(sentiment_words['positive'])
+#     tmp_sentiment_words.update(sentiment_words['negative'])
+#     sentiment_words = tmp_sentiment_words
+#
+#     tmp_sentiment_detector = defaultdict(list)
+#     for noun, senti_words in sentiment_detector.items():
+#         number = sum([w[1] for w in senti_words])
+#         for senti_word in senti_words:
+#             if senti_word[0] in sentiment_words:
+#                 tmp_sentiment_detector[noun].append(
+#                     (senti_word[0], senti_word[1] / number * sentiment_words[senti_word[0]]))
+#     sentiment_detector = tmp_sentiment_detector
+#     tmp_sentiment_detector = {}
+#     for noun, senti_words in sentiment_detector.items():
+#         if len(senti_words) <= 50:
+#             tmp_sentiment_detector[noun] = senti_words
+#
+#     json.dump(tmp_sentiment_detector, open(os.path.join(opt.corpus_dir, corpus_type, 'sentiment_detector.json'), 'w'))
+
+
 def process_senti_corpus():
     corpus_type = 'part'
     senti_corpus = json.load(open(os.path.join(opt.corpus_dir, corpus_type, 'senti_corpus.json'), 'r'))
@@ -133,83 +256,39 @@ def process_senti_corpus():
     json.dump(tmp_senti_corpus, open(os.path.join(opt.corpus_dir, corpus_type, 'tmp_senti_corpus.json'), 'w'))
     json.dump(tmp_senti_corpus_pos, open(os.path.join(opt.corpus_dir, corpus_type, 'tmp_senti_corpus_pos.json'), 'w'))
 
-    all_sentis = all_sentis.most_common()
-    all_sentis = [w for w in all_sentis if w[1] >= 3]
-    sentis = {k: v.most_common() for k, v in sentis.items()}
     sentiment_detector = {k: v.most_common() for k, v in sentiment_detector.items()}
+    sentis_all_num = {}
+    for k, v in sentiment_detector.items():
+        sentis_all_num[k] = sum([n for _, n in v])
+    sentiment_detector = {k: [(sw, nu / sentis_all_num[k]) for sw, nu in v] for k, v in sentiment_detector.items()}
 
-    all_sentis = {k: v for k, v in all_sentis}
-
-    len_sentis = defaultdict(int)
+    sentis = dict(sentis)
+    all_sentis = dict(all_sentis)
     for k, v in sentis.items():
-        for _, n in v:
-            len_sentis[k] += n
-    tf_sentis = defaultdict(dict)
-    tmp_sentis = defaultdict(dict)
+        sentis[k] = dict(v)
     for k, v in sentis.items():
-        for w, n in v:
-            tf_sentis[k][w] = n / len_sentis[k]
-            tmp_sentis[k][w] = n
-    sentis = tmp_sentis
+        for sw, nu in v.items():
+            sentis[k][sw] = nu / all_sentis[sw]
 
-    sentis_result = defaultdict(dict)
-    for k, v in tf_sentis.items():
-        for w, tf in v.items():
-            if w in all_sentis:
-                sentis_result[k][w] = tf * (sentis[k][w] / all_sentis[w])
+    tmp_sentis = []
+    for sw in all_sentis:
+        sc = max([v.get(sw, 0) for v in sentis.values()])
+        if sc > 0.55:
+            tmp_sentis.append([sw, sc])
+    tmp_sentis.sort(key=lambda p: p[1], reverse=True)
+    sentis = {k: v for k, v in tmp_sentis}
 
-    sentiment_words = {}
-    for k in sentis_result:
-        sentiment_words[k] = list(sentis_result[k].items())
-        sentiment_words[k].sort(key=lambda p: p[1], reverse=True)
-        sentiment_words[k] = [w[0] for w in sentiment_words[k]]
-
-    common_rm = []
-    pos_rm = []
-    neg_rm = []
-    for i, w in enumerate(sentiment_words['positive']):
-        if w in sentiment_words['negative']:
-            n_idx = sentiment_words['negative'].index(w)
-            if abs(i - n_idx) < 5:
-                common_rm.append(w)
-            elif i > n_idx:
-                pos_rm.append(w)
-            else:
-                neg_rm.append(w)
-    for w in common_rm:
-        sentiment_words['positive'].remove(w)
-        sentiment_words['negative'].remove(w)
-    for w in pos_rm:
-        sentiment_words['positive'].remove(w)
-    for w in neg_rm:
-        sentiment_words['negative'].remove(w)
-
-    tmp_sentiment_words = {}
-    for senti in sentiment_words:
-        tmp_sentiment_words[senti] = {}
-        for w in sentiment_words[senti]:
-            tmp_sentiment_words[senti][w] = sentis_result[senti][w]
-    sentiment_words = tmp_sentiment_words
-
-    json.dump(sentiment_words, open(os.path.join(opt.corpus_dir, corpus_type, 'sentiment_words.json'), 'w'))
-
-    tmp_sentiment_words = {}
-    tmp_sentiment_words.update(sentiment_words['positive'])
-    tmp_sentiment_words.update(sentiment_words['negative'])
-    sentiment_words = tmp_sentiment_words
-
-    tmp_sentiment_detector = defaultdict(list)
-    for noun, senti_words in sentiment_detector.items():
-        number = sum([w[1] for w in senti_words])
-        for senti_word in senti_words:
-            if senti_word[0] in sentiment_words:
-                tmp_sentiment_detector[noun].append(
-                    (senti_word[0], senti_word[1] / number * sentiment_words[senti_word[0]]))
-    sentiment_detector = tmp_sentiment_detector
     tmp_sentiment_detector = {}
-    for noun, senti_words in sentiment_detector.items():
-        if len(senti_words) <= 50:
-            tmp_sentiment_detector[noun] = senti_words
+    for k, v in sentiment_detector.items():
+        tmp_v = []
+        for sw, sc in v:
+            if sw in sentis:
+                tmp_sc = sc*sentis[sw]
+                if tmp_sc > 0.01:
+                    tmp_v.append([sw, tmp_sc])
+        if tmp_v:
+            tmp_v.sort(key=lambda p: p[1], reverse=True)
+            tmp_sentiment_detector[k] = tmp_v
 
     json.dump(tmp_sentiment_detector, open(os.path.join(opt.corpus_dir, corpus_type, 'sentiment_detector.json'), 'w'))
 
@@ -251,10 +330,11 @@ def get_img_senti_labels():
 def build_idx2word():
     corpus_type = 'part'
     senti_corpus = json.load(open(os.path.join(opt.corpus_dir, corpus_type, 'tmp_senti_corpus.json'), 'r'))
-    sentiment_words = json.load(open(os.path.join(opt.corpus_dir, corpus_type, 'sentiment_words.json'), 'r'))
+    sentiment_detector = json.load(open(os.path.join(opt.corpus_dir, corpus_type, 'sentiment_detector.json'), 'r'))
     idx2sentiment = []
-    for v in sentiment_words.values():
-        idx2sentiment.extend(list(v.keys()))
+    for v in sentiment_detector.values():
+        idx2sentiment.extend([i[0] for i in v])
+    idx2sentiment = list(set(idx2sentiment))
 
     for dataset_nm in opt.dataset_names:
         img_captions = json.load(open(os.path.join(opt.captions_dir, dataset_nm, 'img_captions.json'), 'r'))
@@ -308,10 +388,10 @@ def get_senti_captions():
     sentiment_detector = json.load(open(os.path.join(opt.corpus_dir, corpus_type, 'sentiment_detector.json'), 'r'))
     senti_corpus = json.load(open(os.path.join(opt.corpus_dir, corpus_type, 'tmp_senti_corpus.json'), 'r'))
     senti_corpus_pos = json.load(open(os.path.join(opt.corpus_dir, corpus_type, 'tmp_senti_corpus_pos.json'), 'r'))
-    sentiment_words = json.load(open(os.path.join(opt.corpus_dir, corpus_type, 'sentiment_words.json'), 'r'))
     idx2sentiment = []
-    for v in sentiment_words.values():
-        idx2sentiment.extend(list(v.keys()))
+    for v in sentiment_detector.values():
+        idx2sentiment.extend([i[0] for i in v])
+    idx2sentiment = list(set(idx2sentiment))
 
     senti_captions = defaultdict(list)  # len(pos) = 4633, len(neg) = 3760
     cpts_len = defaultdict(int)  # len = 23, we choose 5

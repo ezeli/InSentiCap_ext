@@ -134,7 +134,7 @@ def train():
     print('====> process image det_sentiments begin')
     det_sentiments_id = {}
     for fn, sentis in tqdm.tqdm(img_det_sentiments.items(), ncols=100):
-        det_sentiments_id[fn] = [word2idx[w] for w in sentis]
+        det_sentiments_id[fn] = [word2idx[w] for w in sentis if w in word2idx]
     img_det_sentiments = det_sentiments_id
     print('====> process image det_concepts end')
 
@@ -156,7 +156,7 @@ def train():
                   [word2idx.get(w, None) or word2idx['<UNK>'] for w in cap] + \
                   [captioner.eos_id]
             cpts = [word2idx[w] for w in cpts if w in word2idx]
-            sentis = [word2idx[w] for w in sentis]
+            sentis = [word2idx[w] for w in sentis if w in word2idx]
             senti_captions_id.append([cap, cpts, sentis, senti_id])
     random.shuffle(senti_captions_id)
     senti_captions = senti_captions_id

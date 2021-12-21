@@ -24,6 +24,7 @@ class MultiHeadAttention(nn.Module):
                  / math.sqrt(self.d_k)  # bs*h*n1*n2
         if mask is not None:
             scores = scores.masked_fill(mask == 0, float('-inf'))
+        self.scores = scores
         scores = scores.softmax(-1)
         return scores.matmul(value)  # bs*h*n1*d_k
 
