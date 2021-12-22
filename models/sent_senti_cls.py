@@ -1,60 +1,57 @@
 import torch
 import torch.nn as nn
-from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+
+from .captioner import Encoder, PositionalEncoding
 
 
 class SentenceSentimentClassifier(nn.Module):
-    def __init__(self, idx2word, sentiment_categories, settings):
+    def __init__(self, idx2word, sentiment_categories, settings=None):
         super(SentenceSentimentClassifier, self).__init__()
+        settings = dict()
+        settings['d_model'] = 512  # model dim
+        settings['d_ff'] = 2048  # feed forward dim
+        settings['h'] = 8  # multi heads num
+        settings['N_enc'] = 4  # encoder layers num
+        settings['dropout_p'] = 0.1
+        settings['max_seq_len'] = 50
+
         self.sentiment_categories = sentiment_categories
         self.neu_id = sentiment_categories.index('neutral')
         self.pad_id = idx2word.index('<PAD>')
+        self.cls_id = idx2word.index('<SOS>')
         self.vocab_size = len(idx2word)
-        self.word_embed = nn.Sequential(nn.Embedding(self.vocab_size, settings['word_emb_dim'],
+        self.word_embed = nn.Sequential(nn.Embedding(self.vocab_size, settings['d_model'],
                                                      padding_idx=self.pad_id),
                                         nn.ReLU(),
                                         nn.Dropout(settings['dropout_p']))
+        self.pe = PositionalEncoding(settings)
 
-        rnn_bidirectional = False
-        self.rnn = nn.LSTM(settings['word_emb_dim'], settings['rnn_hid_dim'], bidirectional=rnn_bidirectional)
-        self.drop = nn.Dropout(settings['dropout_p'])
-        if rnn_bidirectional:
-            rnn_hid_dim = 2*settings['rnn_hid_dim']
-        else:
-            rnn_hid_dim = settings['rnn_hid_dim']
-        self.excitation = nn.Sequential(
-            nn.Linear(rnn_hid_dim, rnn_hid_dim),
-            nn.ReLU(),
-            nn.Linear(rnn_hid_dim, rnn_hid_dim),
-            nn.Sigmoid(),
-        )
-        self.squeeze = nn.AdaptiveAvgPool1d(1)
+        self.encoder = Encoder(settings)
         self.sent_senti_cls = nn.Sequential(
-            nn.Linear(rnn_hid_dim, rnn_hid_dim),
+            nn.Linear(settings['d_model'], settings['d_model']),
             nn.ReLU(),
             nn.Dropout(settings['dropout_p']),
-            nn.Linear(rnn_hid_dim, len(sentiment_categories)),
+            nn.Linear(settings['d_model'], len(sentiment_categories)),
         )
 
     def forward(self, seqs, lengths):
-        seqs = self.word_embed(seqs)  # [bs, max_seq_len, word_dim]
-        seqs = pack_padded_sequence(seqs, lengths, batch_first=True, enforce_sorted=False)
-        out, _ = self.rnn(seqs)
-        out = pad_packed_sequence(out, batch_first=True)[0]  # [bs, seq_len, rnn_hid]
-        out = self.drop(out)
+        seqs = torch.cat([seqs.new_ones(seqs.size(0), 1).fill_(self.cls_id), seqs], dim=1)
+        lengths = [l+1 for l in lengths]
 
-        excitation_res = self.excitation(out)  # [bs, max_len, rnn_hid]
-        # excitation_res = self.drop(excitation_res)
-        excitation_res = pad_packed_sequence(
-            pack_padded_sequence(excitation_res, lengths, batch_first=True, enforce_sorted=False),
-            batch_first=True)[0]
-        squeeze_res = self.squeeze(excitation_res).permute(0, 2, 1)  # [bs, 1, max_len]
-        # squeeze_res = squeeze_res.masked_fill(squeeze_res == 0, -1e10)
-        # squeeze_res = squeeze_res.softmax(dim=-1)
-        sent_feats = squeeze_res.bmm(out).squeeze(dim=1)  # [bs, rnn_hid]
-        pred = self.sent_senti_cls(sent_feats)  # [bs, 3]
+        seqs = self.word_embed(seqs)  # [bs, seq_len, d_model]
+        seqs = self.pe(seqs)
 
-        return pred, squeeze_res.squeeze(dim=1)
+        seq_masks = seqs.new_zeros(len(lengths), max(lengths), dtype=torch.bool)  # bs*seq_len
+        for i, l in enumerate(lengths):
+            seq_masks[i, :l] = True
+        seq_masks = seq_masks.unsqueeze(-2)  # bs*1*seq_len
+
+        out = self.encoder(seqs, seq_masks)
+        out = out[:, 0]  # [bs, d_model]
+        pred = self.sent_senti_cls(out)  # [bs, 3]
+        att_weights = self.encoder.layers[-1].multi_head_att.scores.sum(1)[:, 0, 1:].softmax(-1)  # bs*seq_len
+
+        return pred, att_weights
 
     def sample(self, seqs, lengths):
         self.eval()
