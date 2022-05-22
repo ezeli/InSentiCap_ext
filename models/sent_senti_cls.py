@@ -35,6 +35,7 @@ class SentenceSentimentClassifier(nn.Module):
         )
 
     def forward(self, seqs, lengths):
+        seqs = seqs[:, :max(lengths)]
         seqs = torch.cat([seqs.new_ones(seqs.size(0), 1).fill_(self.cls_id), seqs], dim=1)
         lengths = [l+1 for l in lengths]
 

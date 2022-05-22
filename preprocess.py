@@ -492,20 +492,21 @@ def get_lm_sents():
         senti_captions = json.load(open(os.path.join(opt.captions_dir, dataset_nm, corpus_type, 'senti_captions.json'), 'r'))
         for senti in senti_captions:
             senti_captions[senti] = [' '.join(c[0]) for c in senti_captions[senti]]
-        senti_sents = defaultdict(str)
+        senti_captions['overall'] = sum(senti_captions.values(), [])
         for senti in senti_captions:
-            for cap in senti_captions[senti]:
-                senti_sents[senti] += cap + '\n'
+            senti_captions[senti] = '\n'.join(senti_captions[senti])
 
         lm_dir = os.path.join(opt.captions_dir, dataset_nm, corpus_type, 'lm')
         if not os.path.exists(lm_dir):
             os.makedirs(lm_dir)
-        for senti in senti_sents:
+        for senti in senti_captions:
             with open(os.path.join(lm_dir, '%s_w.txt' % senti), 'w') as f:
-                f.write(senti_sents[senti])
+                f.write(senti_captions[senti])
 
     count_cmd = 'ngram-count -text %s -order 3 -write %s'
     lm_cmd = 'ngram-count -read %s -order 3 -lm %s -interpolate -kndiscount'
+    # for kenlm
+    kenlm_cmd = "lmplz -o 3 --interpolate_unigrams 0 <%s >%s"
     for dataset_nm in opt.dataset_names:
         lm_dir = os.path.join(opt.captions_dir, dataset_nm, corpus_type, 'lm')
         fns = os.listdir(lm_dir)
@@ -518,9 +519,10 @@ def get_lm_sents():
                 print(out)
                 out = os.popen(lm_cmd % (count_file, lm_file)).read()
                 print(out)
+                out = os.popen(kenlm_cmd % (txt_file, os.path.join(lm_dir, '%s.kenlm.arpa' % fn.split('.')[0]))).read()
+                print(out)
 
     # for kenlm
-    kenlm_cmd = "lmplz -o 3 <%s >%s"
     for dataset_nm in opt.dataset_names:
         senti_captions = json.load(
             open(os.path.join(opt.captions_dir, dataset_nm, corpus_type, 'senti_captions.json'), 'r'))
@@ -538,6 +540,7 @@ def get_lm_sents():
                 tmp = [word2idx.get(w, None) or word2idx['<UNK>'] for w in cap] + [word2idx['<EOS>']]
                 tmp = ' '.join([str(idx) for idx in tmp])
                 senti_captions_id[senti].append(tmp)
+        senti_captions_id['overall'] = sum(senti_captions_id.values(), [])
         lm_dir = os.path.join(opt.captions_dir, dataset_nm, corpus_type, 'lm')
         for senti in senti_captions_id:
             senti_captions_id[senti] = '\n'.join(senti_captions_id[senti])
@@ -556,7 +559,7 @@ if __name__ == '__main__':
                         default='./data/pre_models/resnet101.pth')
 
     parser.add_argument('--caption_datasets_dir', type=str, default='../../dataset/caption/caption_datasets')
-    parser.add_argument('--dataset_names', type=list, default=['flickr30k', 'coco'])
+    parser.add_argument('--dataset_names', type=list, default=['coco', 'msrvtt'])
     parser.add_argument('--captions_dir', type=str, default='./data/captions/')
 
     parser.add_argument('--corpus_dir', type=str, default='./data/corpus')
