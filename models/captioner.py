@@ -4,9 +4,10 @@ import torch
 from torch import nn
 from collections import namedtuple
 
-
 BeamCandidate = namedtuple('BeamCandidate',
-                           ['log_prob_sum', 'log_prob_seq', 'word_id_seq'])
+                           ['log_prob_sum', 'log_prob_seq', 'word_id_seq',
+                            'sem_con_scores_seq', 'sem_sen_scores_seq',
+                            'vis_con_scores_seq', 'vis_sen_scores_seq'])
 
 
 class MultiHeadAttention(nn.Module):
@@ -128,6 +129,8 @@ class DecoderLayer(nn.Module):
         self.layer_norms = nn.ModuleList([nn.LayerNorm(settings['d_model']) for _ in range(6)])
         self.drop = nn.Dropout(settings['dropout_p'])
 
+        self.fuse_scores = {}
+
     def _sublayer(self, x, sublayer, n):
         return self.drop(sublayer(self.layer_norms[n](x)))  # x + self.drop(sublayer(self.layer_norms[n](x)))
 
@@ -139,7 +142,7 @@ class DecoderLayer(nn.Module):
         scores = scores.transpose(2, 3).softmax(-1)  # [bs, seq_len, 1, 2 or 4]
         att_feats = scores.matmul(att_feats).squeeze(2)  # [bs, seq_len, d_model]
         # att_feats = att_feats.mean(2)
-        return att_feats
+        return att_feats, scores.squeeze(2)
 
     def forward(self, captions, seq_masks, cpt_words, senti_words, region_feats, spatial_feats):
         captions = self._add_res_connection(captions, lambda x: self.self_att(x, x, x, seq_masks), 0)
@@ -147,12 +150,14 @@ class DecoderLayer(nn.Module):
         cpt_words = self._sublayer(captions, lambda x: self.sem_con_att(x, cpt_words, cpt_words), 1)
         senti_words = self._sublayer(captions, lambda x: self.sem_sen_att(x, senti_words, senti_words), 2)
         sem_feats = torch.stack([cpt_words, senti_words], dim=2)  # [bs, seq_len, 2, d_model]
-        sem_feats = self._fuse_gate(captions, sem_feats)
+        sem_feats, sem_scores = self._fuse_gate(captions, sem_feats)
+        self.fuse_scores['sem_scores'] = sem_scores
         if region_feats is not None:
             region_feats = self._sublayer(captions, lambda x: self.vis_con_att(x, region_feats, region_feats), 3)
             spatial_feats = self._sublayer(captions, lambda x: self.vis_sen_att(x, spatial_feats, spatial_feats), 4)
             vis_feats = torch.stack([region_feats, spatial_feats], dim=2)  # [bs, seq_len, 4, d_model]
-            vis_feats = self._fuse_gate(captions, vis_feats)
+            vis_feats, vis_scores = self._fuse_gate(captions, vis_feats)
+            self.fuse_scores['vis_scores'] = vis_scores
             fuse_feats = (sem_feats + vis_feats) / 2
         else:
             fuse_feats = sem_feats
@@ -272,7 +277,7 @@ class Captioner(nn.Module):
         for i, senti_label in enumerate(senti_labels):
             senti_label = int(senti_label)
             head = self.vis_sen_encoder[senti_label]
-            s_feat = head['conv'](spatial_feats[i:i+1])  # [1, 512, 6, 6]
+            s_feat = head['conv'](spatial_feats[i:i + 1])  # [1, 512, 6, 6]
             s_feat = s_feat.squeeze(0).reshape(s_feat.size(1), -1).permute(1, 0).contiguous()  # [36, 512]
             s_feat = head['emb'](s_feat)  # [36, 512]
             s_feat = head['ln'](s_feat)  # [36, 512]
@@ -292,7 +297,8 @@ class Captioner(nn.Module):
         captions, seq_masks = self._sequence_encode(captions, lengths)  # bs*seq_len*d_model, bs*seq_len*seq_len
         captions = captions + senti_labels.unsqueeze(1)
 
-        dec_out = self.decoder(captions, seq_masks, cpt_words, senti_words, region_feats, spatial_feats)  # bs*seq_len*d_model
+        dec_out = self.decoder(captions, seq_masks, cpt_words, senti_words, region_feats,
+                               spatial_feats)  # bs*seq_len*d_model
         dec_out = self.classifier(dec_out).log_softmax(dim=-1)  # bs*seq_len*vocab
         return dec_out
 
@@ -364,13 +370,16 @@ class Captioner(nn.Module):
         senti_labels = self.senti_label_embed(senti_labels)  # [1, d_model]
         cpt_words, senti_words = self._sem_encode(cpt_words, senti_words)
 
-        # log_prob_sum, log_prob_seq, word_id_seq
-        candidates = [BeamCandidate(0., [], [self.sos_id])]
+        # log_prob_sum, log_prob_seq, word_id_seq,
+        # sem_con_scores_seq, sem_sen_scores_seq, vis_con_scores_seq, vis_sen_scores_seq
+        candidates = [BeamCandidate(0., [], [self.sos_id], [], [], [], [])]
         for t in range(self.max_seq_len):
             tmp_candidates = []
             end_flag = True
             for candidate in candidates:
-                log_prob_sum, log_prob_seq, word_id_seq = candidate
+                log_prob_sum, log_prob_seq, word_id_seq, \
+                sem_con_scores_seq, sem_sen_scores_seq, \
+                vis_con_scores_seq, vis_sen_scores_seq = candidate
                 if t > 0 and word_id_seq[-1] == self.eos_id:
                     tmp_candidates.append(candidate)
                 else:
@@ -387,6 +396,12 @@ class Captioner(nn.Module):
                     if decoding_constraint:  # do not generate last step word
                         logprobs[word_id_seq[-1]] += float('-inf')
 
+                    fuse_scores = self.decoder.layers[-1].fuse_scores
+                    sem_con_score = float(fuse_scores['sem_scores'][:, -1, 0])  # 1
+                    sem_sen_score = float(fuse_scores['sem_scores'][:, -1, 1])  # 1
+                    vis_con_score = float(fuse_scores['vis_scores'][:, -1, 0])  # 1
+                    vis_sen_score = float(fuse_scores['vis_scores'][:, -1, 1])  # 1
+
                     output_sorted, index_sorted = torch.sort(logprobs, descending=True)
                     for k in range(beam_size):
                         log_prob, word_id = output_sorted[k], index_sorted[k]  # tensor, tensor
@@ -394,7 +409,11 @@ class Captioner(nn.Module):
                         word_id = int(word_id)
                         tmp_candidates.append(BeamCandidate(log_prob_sum + log_prob,
                                                             log_prob_seq + [log_prob],
-                                                            word_id_seq + [word_id]))
+                                                            word_id_seq + [word_id],
+                                                            sem_con_scores_seq + [sem_con_score],
+                                                            sem_sen_scores_seq + [sem_sen_score],
+                                                            vis_con_scores_seq + [vis_con_score],
+                                                            vis_sen_scores_seq + [vis_sen_score]))
             candidates = sorted(tmp_candidates, key=lambda x: x.log_prob_sum, reverse=True)[:beam_size]
             if end_flag:
                 break
@@ -402,8 +421,16 @@ class Captioner(nn.Module):
         # captions, scores
         captions = [' '.join([self.idx2word[idx] for idx in candidate.word_id_seq[1:-1]])
                     for candidate in candidates]
+        sem_con_scores_str = [' '.join(['%.2f' % s for s in candidate.sem_con_scores_seq[:-1]])
+                              for candidate in candidates]
+        sem_sen_scores_str = [' '.join(['%.2f' % s for s in candidate.sem_sen_scores_seq[:-1]])
+                              for candidate in candidates]
+        vis_con_scores_str = [' '.join(['%.2f' % s for s in candidate.vis_con_scores_seq[:-1]])
+                              for candidate in candidates]
+        vis_sen_scores_str = [' '.join(['%.2f' % s for s in candidate.vis_sen_scores_seq[:-1]])
+                              for candidate in candidates]
         scores = [candidate.log_prob_sum for candidate in candidates]
-        return captions, scores
+        return captions, (sem_con_scores_str, sem_sen_scores_str, vis_con_scores_str, vis_sen_scores_str, scores)
 
     def get_optim_criterion(self, lr, weight_decay=0, smoothing=0.1):
         return torch.optim.Adam(self.parameters(), lr=lr, weight_decay=weight_decay), \

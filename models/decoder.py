@@ -44,7 +44,7 @@ class Detector():
         if training:
             seq2seq_data = iter(data[1])
         caption_data = iter(data[0])
-        for _ in tqdm.tqdm(range(min(2000, len(data[0]))), ncols=100):
+        for _ in tqdm.tqdm(range(min(500, len(data[0]))), ncols=100):
             fns, vis_sentis, region_feats, spatial_feats, (caps_tensor, lengths), xe_senti_labels, cpts_tensor, sentis_tensor, ground_truth = next(caption_data)
             vis_sentis = vis_sentis.to(device)
             region_feats = region_feats.to(device)

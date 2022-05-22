@@ -193,7 +193,7 @@ def train():
         lms[i] = kenlm.LanguageModel(os.path.join(lm_dir, '%s_id.kenlm.arpa' % senti))
     model.set_lms(lms)
 
-    tmp_dir = 'final/4_4_2000_05_01_01_01'
+    tmp_dir = 'fuse_scores/4_4_500_05_01_01_01'
     checkpoint = os.path.join(opt.checkpoint, 'rl', dataset_name, corpus_type, tmp_dir)
     # if not os.path.exists(checkpoint):
     #     os.makedirs(checkpoint)
@@ -223,11 +223,15 @@ def train():
                 cpts_tensor = cpts_tensor.to(opt.device)
                 sentis_tensor = sentis_tensor.to(opt.device)
                 for i, fn in enumerate(fns):
-                    captions, _ = model.captioner.sample(
+                    captions, (sem_con_scores_str, sem_sen_scores_str, vis_con_scores_str, vis_sen_scores_str, _) = model.captioner.sample(
                         region_feats[i], spatial_feats[i], vis_sentis[i:i + 1], cpts_tensor[i], sentis_tensor[i],
                         beam_size=opt.beam_size)
                     det_img_senti = opt.sentiment_categories[int(vis_sentis[i])]
-                    results[det_img_senti].append({'image_id': fn, 'caption': captions[0]})
+                    results[det_img_senti].append({'image_id': fn, 'caption': captions[0],
+                                                   'sem_con_scores': sem_con_scores_str[0],
+                                                   'sem_sen_scores': sem_sen_scores_str[0],
+                                                   'vis_con_scores': vis_con_scores_str[0],
+                                                   'vis_sen_scores': vis_sen_scores_str[0]})
                     det_sentis[fn] = det_img_senti
 
             for senti in results:
@@ -236,11 +240,17 @@ def train():
 
             sents = defaultdict(str)
             sents_w = defaultdict(str)
+            sent_scores_w = defaultdict(str)
             for senti in results:
                 ress = results[senti]
                 for res in ress:
                     caption = res['caption']
+                    sem_con_scores = res['sem_con_scores']
+                    sem_sen_scores = res['sem_sen_scores']
+                    vis_con_scores = res['vis_con_scores']
+                    vis_sen_scores = res['vis_sen_scores']
                     sents_w[senti] += caption + '\n'
+                    sent_scores_w[senti] += caption + '\n' + sem_con_scores + '\n' + sem_sen_scores + '\n' + vis_con_scores + '\n' + vis_sen_scores + '\n'
                     caption = [str(word2idx[w]) for w in caption.split()] + [str(word2idx['<EOS>'])]
                     caption = ' '.join(caption) + '\n'
                     sents[senti] += caption
@@ -249,6 +259,8 @@ def train():
                     f.write(sents[senti])
                 with open(os.path.join(result_dir, 'result_%d_%s_w.txt' % (epoch, senti)), 'w') as f:
                     f.write(sents_w[senti])
+                with open(os.path.join(result_dir, 'result_%d_%s_scores_w.txt' % (epoch, senti)), 'w') as f:
+                    f.write(sent_scores_w[senti])
 
         if epoch < -1:
             chkpoint = {
