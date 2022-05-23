@@ -126,5 +126,5 @@ class Detector():
         #         self.cls_flag = 1.0
 
         for k, v in all_losses.items():
-            all_losses[k] = v / len(data)
+            all_losses[k] = v / min(500, len(data[0]))
         return all_losses

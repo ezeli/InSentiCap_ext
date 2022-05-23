@@ -138,7 +138,7 @@ class DecoderLayer(nn.Module):
         return x + self._sublayer(x, sublayer, n)  # x + self.drop(sublayer(self.layer_norms[n](x)))
 
     def _fuse_gate(self, x, att_feats):
-        scores = att_feats.matmul(x.unsqueeze(-1))  # [bs, seq_len, 2 or 4, 1]
+        scores = att_feats.matmul(x.unsqueeze(-1)) / math.sqrt(att_feats.shape[-1])  # [bs, seq_len, 2 or 4, 1]
         scores = scores.transpose(2, 3).softmax(-1)  # [bs, seq_len, 1, 2 or 4]
         att_feats = scores.matmul(att_feats).squeeze(2)  # [bs, seq_len, d_model]
         # att_feats = att_feats.mean(2)
@@ -396,11 +396,13 @@ class Captioner(nn.Module):
                     if decoding_constraint:  # do not generate last step word
                         logprobs[word_id_seq[-1]] += float('-inf')
 
-                    fuse_scores = self.decoder.layers[-1].fuse_scores
-                    sem_con_score = float(fuse_scores['sem_scores'][:, -1, 0])  # 1
-                    sem_sen_score = float(fuse_scores['sem_scores'][:, -1, 1])  # 1
-                    vis_con_score = float(fuse_scores['vis_scores'][:, -1, 0])  # 1
-                    vis_sen_score = float(fuse_scores['vis_scores'][:, -1, 1])  # 1
+                    sem_con_score = sem_sen_score = vis_con_score = vis_sen_score = 0
+                    for layer in self.decoder.layers:
+                        fuse_scores = layer.fuse_scores
+                        sem_con_score += float(fuse_scores['sem_scores'][0, -1, 0])  # 1
+                        sem_sen_score += float(fuse_scores['sem_scores'][0, -1, 1])  # 1
+                        vis_con_score += float(fuse_scores['vis_scores'][0, -1, 0])  # 1
+                        vis_sen_score += float(fuse_scores['vis_scores'][0, -1, 1])  # 1
 
                     output_sorted, index_sorted = torch.sort(logprobs, descending=True)
                     for k in range(beam_size):
@@ -421,13 +423,13 @@ class Captioner(nn.Module):
         # captions, scores
         captions = [' '.join([self.idx2word[idx] for idx in candidate.word_id_seq[1:-1]])
                     for candidate in candidates]
-        sem_con_scores_str = [' '.join(['%.2f' % s for s in candidate.sem_con_scores_seq[:-1]])
+        sem_con_scores_str = [' '.join(['%f' % s for s in candidate.sem_con_scores_seq[:-1]] + [', sum:', '%f' % sum(candidate.sem_con_scores_seq[:-1])])
                               for candidate in candidates]
-        sem_sen_scores_str = [' '.join(['%.2f' % s for s in candidate.sem_sen_scores_seq[:-1]])
+        sem_sen_scores_str = [' '.join(['%f' % s for s in candidate.sem_sen_scores_seq[:-1]] + [', sum:', '%f' % sum(candidate.sem_sen_scores_seq[:-1])])
                               for candidate in candidates]
-        vis_con_scores_str = [' '.join(['%.2f' % s for s in candidate.vis_con_scores_seq[:-1]])
+        vis_con_scores_str = [' '.join(['%f' % s for s in candidate.vis_con_scores_seq[:-1]] + [', sum:', '%f' % sum(candidate.vis_con_scores_seq[:-1])])
                               for candidate in candidates]
-        vis_sen_scores_str = [' '.join(['%.2f' % s for s in candidate.vis_sen_scores_seq[:-1]])
+        vis_sen_scores_str = [' '.join(['%f' % s for s in candidate.vis_sen_scores_seq[:-1]] + [', sum:', '%f' % sum(candidate.vis_sen_scores_seq[:-1])])
                               for candidate in candidates]
         scores = [candidate.log_prob_sum for candidate in candidates]
         return captions, (sem_con_scores_str, sem_sen_scores_str, vis_con_scores_str, vis_sen_scores_str, scores)
