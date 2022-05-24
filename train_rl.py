@@ -62,7 +62,7 @@ def train():
         print("====> loaded checkpoint '{}', epoch: {}"
               .format(opt.rl_resume, chkpoint['epoch']))
     else:
-        rl_xe_resume = os.path.join(opt.checkpoint, 'xe', dataset_name, corpus_type, 'att_and_mean_fuse/model-best.pth')
+        rl_xe_resume = os.path.join(opt.checkpoint, 'xe', dataset_name, corpus_type, 'fuse_scores/model-best.pth')
         print("====> loading checkpoint '{}'".format(rl_xe_resume))
         chkpoint = torch.load(rl_xe_resume, map_location=lambda s, l: s)
         assert idx2word == chkpoint['idx2word'], \

@@ -92,7 +92,7 @@ def train():
     print('====> process image det_sentiments begin')
     det_sentiments_id = {}
     for fn, sentis in tqdm.tqdm(img_det_sentiments.items(), ncols=100):
-        det_sentiments_id[fn] = [word2idx[w] for w in sentis]
+        det_sentiments_id[fn] = [word2idx[w] for w in sentis if w in word2idx]
     img_det_sentiments = det_sentiments_id
     print('====> process image det_concepts end')
 
@@ -111,7 +111,7 @@ def train():
                   [word2idx.get(w, None) or word2idx['<UNK>'] for w in cap] + \
                   [captioner.eos_id]
             cpts = [word2idx[w] for w in cpts if w in word2idx]
-            sentis = [word2idx[w] for w in sentis]
+            sentis = [word2idx[w] for w in sentis if w in word2idx]
             senti_captions_id.append([cap, cpts, sentis, senti_id])
     senti_captions = senti_captions_id
     print('====> process senti corpus end')
@@ -186,7 +186,7 @@ def train():
             loss_val[k] = v / len(data)
         return loss_val
 
-    tmp_dir = 'att_and_mean_fuse'
+    tmp_dir = 'fuse_scores'
     checkpoint = os.path.join(opt.checkpoint, 'xe', dataset_name, corpus_type, tmp_dir)
     if not os.path.exists(checkpoint):
         os.makedirs(checkpoint)
@@ -213,6 +213,7 @@ def train():
                 senti_label = torch.LongTensor([captioner.neu_idx]).to(opt.device)
                 results = []
                 fact_txt = ''
+                fact_scores_txt = ''
                 for fns, _, region_feats, spatial_feats, _, _, cpts_tensor, sentis_tensor, _ in tqdm.tqdm(test_data,
                                                                                                           ncols=100):
                     region_feats = region_feats.to(opt.device)
@@ -220,14 +221,17 @@ def train():
                     cpts_tensor = cpts_tensor.to(opt.device)
                     sentis_tensor = sentis_tensor.to(opt.device)
                     for i, fn in enumerate(fns):
-                        captions, _ = captioner.sample(
+                        captions, (sem_con_scores_str, sem_sen_scores_str, vis_con_scores_str, vis_sen_scores_str, _) = captioner.sample(
                             region_feats[i], spatial_feats[i], senti_label, cpts_tensor[i], sentis_tensor[i],
                             beam_size=opt.beam_size)
                         results.append({'image_id': fn, 'caption': captions[0]})
                         fact_txt += captions[0] + '\n'
+                        fact_scores_txt += captions[0] + '\n' + sem_con_scores_str[0] + '\n' + sem_sen_scores_str[0] + '\n' + vis_con_scores_str[0] + '\n' + vis_sen_scores_str[0] + '\n'
                 json.dump(results, open(os.path.join(result_dir, 'result_%d.json' % epoch), 'w'))
                 with open(os.path.join(result_dir, 'result_%d.txt' % epoch), 'w') as f:
                     f.write(fact_txt)
+                with open(os.path.join(result_dir, 'result_%d_scores.txt' % epoch), 'w') as f:
+                    f.write(fact_scores_txt)
 
             chkpoint = {
                 'epoch': epoch,
