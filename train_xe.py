@@ -221,12 +221,17 @@ def train():
                     cpts_tensor = cpts_tensor.to(opt.device)
                     sentis_tensor = sentis_tensor.to(opt.device)
                     for i, fn in enumerate(fns):
-                        captions, (sem_con_scores_str, sem_sen_scores_str, vis_con_scores_str, vis_sen_scores_str, _) = captioner.sample(
+                        caption, (fuse_scores, _) = captioner.sample(
                             region_feats[i], spatial_feats[i], senti_label, cpts_tensor[i], sentis_tensor[i],
                             beam_size=opt.beam_size)
-                        results.append({'image_id': fn, 'caption': captions[0]})
-                        fact_txt += captions[0] + '\n'
-                        fact_scores_txt += captions[0] + '\n' + sem_con_scores_str[0] + '\n' + sem_sen_scores_str[0] + '\n' + vis_con_scores_str[0] + '\n' + vis_sen_scores_str[0] + '\n'
+                        results.append({'image_id': fn, 'caption': caption, 'fuse_scores': fuse_scores})
+                        fact_txt += caption + '\n'
+                        fact_scores_txt += \
+                            caption + '\n' + \
+                            '\n'.join(
+                                [f'{s_name}: ' + ' '.join([f'{val}' for val in s_vals]) + f', sum: {sum(s_vals)}'
+                                 for s_name, s_vals in fuse_scores.items()]) + \
+                            '\n' + '\n'
                 json.dump(results, open(os.path.join(result_dir, 'result_%d.json' % epoch), 'w'))
                 with open(os.path.join(result_dir, 'result_%d.txt' % epoch), 'w') as f:
                     f.write(fact_txt)
