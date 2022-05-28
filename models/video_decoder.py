@@ -26,7 +26,7 @@ class Detector():
         self.cap_rl_crit = RewardCriterion()
 
         self.cls_flag = 0.5
-        self.lm_flag = 0.3
+        self.lm_flag = 0.1
         self.seq_flag = 0.1
         self.xe_flag = 0.1
 
@@ -44,7 +44,7 @@ class Detector():
         if training:
             seq2seq_data = iter(data[1])
         caption_data = iter(data[0])
-        for _ in tqdm.tqdm(range(min(200, len(data[0]))), ncols=100):
+        for _ in tqdm.tqdm(range(min(500, len(data[0]))), ncols=100):
             fns, vis_sentis, (two_d_feats_tensor, two_d_feats_lengths), \
             (three_d_feats_tensor, three_d_feats_lengths), (audio_feats_tensor, audio_feats_lengths), \
             (caps_tensor, lengths), xe_senti_labels, cpts_tensor, sentis_tensor, ground_truth = next(caption_data)

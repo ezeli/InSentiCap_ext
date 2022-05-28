@@ -40,14 +40,14 @@ def parse_opt():
 
     # rl
     parser.add_argument('--rl_lr', type=float, default=4e-5)
-    parser.add_argument('--rl_bs', type=int, default=5)
+    parser.add_argument('--rl_bs', type=int, default=10)
     parser.add_argument('--rl_num_works', type=int, default=2)
     parser.add_argument('--rl_resume', type=str, default='')
     parser.add_argument('--rl_senti_resume', type=str, default='checkpoint/sentiment/model-10.pth')
     parser.add_argument('--rl_epochs', type=int, default=100)
 
     # common
-    parser.add_argument('--dataset_name', type=str, default='coco', choices=['coco', 'flickr30k', 'msrvtt'])
+    parser.add_argument('--dataset_name', type=str, default='msrvtt', choices=['coco', 'flickr30k', 'msrvtt'])
     parser.add_argument('--corpus_type', type=str, default='part', choices=['part', 'full'])
     parser.add_argument('--captions_dir', type=str, default='./data/captions')
     parser.add_argument('--feats_dir', type=str, default='./data/features')
@@ -84,7 +84,7 @@ def parse_opt():
     settings['d_model'] = 512  # model dim
     settings['d_ff'] = 2048  # feed forward dim
     settings['h'] = 8  # multi heads num
-    settings['N_enc'] = 4  # encoder layers num
+    settings['N_enc'] = 1  # encoder layers num
     settings['N_dec'] = 4  # decoder layers num
     settings['dropout_p'] = 0.1
     settings['max_seq_len'] = args.max_seq_len

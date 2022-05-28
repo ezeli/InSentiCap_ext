@@ -183,7 +183,7 @@ def train():
             loss_val[k] = v / len(data)
         return loss_val
 
-    tmp_dir = '1_4'
+    tmp_dir = 'fuse_scores'
     checkpoint = os.path.join(opt.checkpoint, 'xe', dataset_name, corpus_type, tmp_dir)
     if not os.path.exists(checkpoint):
         os.makedirs(checkpoint)
@@ -210,6 +210,7 @@ def train():
                 senti_label = torch.LongTensor([captioner.neu_idx]).to(opt.device)
                 results = []
                 fact_txt = ''
+                fact_scores_txt = ''
                 for fns, _, (two_d_feats_tensor, two_d_feats_lengths), (three_d_feats_tensor, three_d_feats_lengths), (audio_feats_tensor, audio_feats_lengths), _, _, cpts_tensor, sentis_tensor, _ in tqdm.tqdm(test_data, ncols=100):
                     two_d_feats_tensor = two_d_feats_tensor.to(opt.device)
                     three_d_feats_tensor = three_d_feats_tensor.to(opt.device)
@@ -217,17 +218,25 @@ def train():
                     cpts_tensor = cpts_tensor.to(opt.device)
                     sentis_tensor = sentis_tensor.to(opt.device)
                     for i, fn in enumerate(fns):
-                        captions, _ = captioner.sample(
+                        caption, (fuse_scores, _) = captioner.sample(
                             two_d_feats_tensor[i, :two_d_feats_lengths[i]],
                             three_d_feats_tensor[i, :three_d_feats_lengths[i]],
                             audio_feats_tensor[i, :audio_feats_lengths[i]],
                             senti_label, cpts_tensor[i], sentis_tensor[i],
                             beam_size=opt.beam_size)
-                        results.append({'image_id': fn, 'caption': captions[0]})
-                        fact_txt += captions[0] + '\n'
+                        results.append({'image_id': fn, 'caption': caption, 'fuse_scores': fuse_scores})
+                        fact_txt += caption + '\n'
+                        fact_scores_txt += \
+                            caption + '\n' + \
+                            '\n'.join(
+                                [f'{s_name}: ' + ' '.join([f'{val}' for val in s_vals]) + f', sum: {sum(s_vals)}'
+                                 for s_name, s_vals in fuse_scores.items()]) + \
+                            '\n' + '\n'
                 json.dump(results, open(os.path.join(result_dir, 'result_%d.json' % epoch), 'w'))
                 with open(os.path.join(result_dir, 'result_%d.txt' % epoch), 'w') as f:
                     f.write(fact_txt)
+                with open(os.path.join(result_dir, 'result_%d_scores.txt' % epoch), 'w') as f:
+                    f.write(fact_scores_txt)
 
             chkpoint = {
                 'epoch': epoch,
