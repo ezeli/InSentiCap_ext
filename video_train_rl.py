@@ -199,7 +199,7 @@ def train():
         lms[i] = kenlm.LanguageModel(os.path.join(lm_dir, '%s_id.kenlm.arpa' % senti))
     model.set_lms(lms)
 
-    tmp_dir = 'fuse_scores/1_4_500_05_01_01_01'
+    tmp_dir = f'fuse_scores/{opt.settings["N_enc"]}_{opt.settings["N_dec"]}_{model.min_iter_cnt}_{model.cls_flag}_{model.lm_flag}_{model.seq_flag}_{model.xe_flag}'
     checkpoint = os.path.join(opt.checkpoint, 'rl', dataset_name, corpus_type, tmp_dir)
     if not os.path.exists(checkpoint):
         os.makedirs(checkpoint)

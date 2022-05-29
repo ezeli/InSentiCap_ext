@@ -29,6 +29,7 @@ class Detector():
         self.lm_flag = 0.1
         self.seq_flag = 0.1
         self.xe_flag = 0.1
+        self.min_iter_cnt = 500
 
     def set_ciderd_scorer(self, captions):
         self.ciderd_scorer = get_ciderd_scorer(captions, self.captioner.sos_id, self.captioner.eos_id)
@@ -44,7 +45,7 @@ class Detector():
         if training:
             seq2seq_data = iter(data[1])
         caption_data = iter(data[0])
-        for _ in tqdm.tqdm(range(min(500, len(data[0]))), ncols=100):
+        for _ in tqdm.tqdm(range(min(self.min_iter_cnt, len(data[0]))), ncols=100):
             fns, vis_sentis, (two_d_feats_tensor, two_d_feats_lengths), \
             (three_d_feats_tensor, three_d_feats_lengths), (audio_feats_tensor, audio_feats_lengths), \
             (caps_tensor, lengths), xe_senti_labels, cpts_tensor, sentis_tensor, ground_truth = next(caption_data)
@@ -132,5 +133,5 @@ class Detector():
         #         self.cls_flag = 1.0
 
         for k, v in all_losses.items():
-            all_losses[k] = v / len(data)
+            all_losses[k] = v / min(self.min_iter_cnt, len(data[0]))
         return all_losses

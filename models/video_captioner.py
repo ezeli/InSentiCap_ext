@@ -324,7 +324,7 @@ class Captioner(nn.Module):
         # captions, scores
         caption = ' '.join([self.idx2word[idx] for idx in candidates[0].word_id_seq[1:-1]])
         fuse_scores = {}
-        for s_name, s_vals in candidates[0].scores_seq:
+        for s_name, s_vals in candidates[0].scores_seq.items():
             fuse_scores[s_name] = s_vals[:-1]
         score = candidates[0].log_prob_sum
         return caption, (fuse_scores, score)
