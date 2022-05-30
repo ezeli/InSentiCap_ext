@@ -60,7 +60,7 @@ class DecoderLayer(nn.Module):
                 ln_idx += 2
                 f_feats = torch.stack([con_feats, sen_feats], dim=2)  # [bs, seq_len, 2, d_model]
                 f_feats, f_scores = self._fuse_gate(captions, f_feats)
-                self.fuse_scores[f'{feat_type}_scores'] = sem_scores
+                self.fuse_scores[f'{feat_type}_scores'] = f_scores
                 vis_fuse_feats.append(f_feats)
 
             fuse_feats = captions + (sem_feats + sum(vis_fuse_feats)) / (1 + len(vis_fuse_feats))
